@@ -3,8 +3,9 @@
 A small macOS browser from NIH Industries, built on WebKit (WKWebView).
 
 - **Spaces**: each Space has its own tabs and its own persistent cookies,
-  storage and logins. Switch with the dots at the bottom of the sidebar;
-  right-click one to rename, reorder or delete it. Deleting a Space erases
+  storage and logins, and its own colour and emoji, which tint the sidebar.
+  Switch with the dots at the bottom of the sidebar; right-click one to
+  edit (name, emoji, colour), reorder or delete it. Deleting a Space erases
   its site data.
 - **`adequate` CLI**: `adequate open <space> <url>...` opens tabs in a Space,
   creating it if needed; `adequate spaces` lists them. Requests carry a

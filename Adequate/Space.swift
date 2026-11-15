@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import Security
 import Foundation
 import WebKit
@@ -8,6 +9,55 @@ import WebKit
 struct Space: Identifiable, Codable, Hashable {
     let id: UUID
     var name: String
+    /// Optional only so spaces.json from before colours still loads;
+    /// SpaceStore fills them in on launch.
+    var color: SpaceColor?
+    var emoji: String?
+
+    var tint: Color { (color ?? .blue).color }
+    var symbol: String { emoji ?? String(name.prefix(1)).uppercased() }
+}
+
+/// The colours a Space can wear, saved by name.
+enum SpaceColor: String, Codable, CaseIterable, Identifiable {
+    case pink, red, orange, yellow, green, mint, teal, blue, indigo, purple, brown, gray
+
+    var id: Self { self }
+
+    var color: Color {
+        switch self {
+        case .pink: .pink
+        case .red: .red
+        case .orange: .orange
+        case .yellow: .yellow
+        case .green: .green
+        case .mint: .mint
+        case .teal: .teal
+        case .blue: .blue
+        case .indigo: .indigo
+        case .purple: .purple
+        case .brown: .brown
+        case .gray: .gray
+        }
+    }
+}
+
+enum SpaceLook {
+    static let emoji = ["🏠", "💼", "🦄", "🌈", "🍉", "🪩", "🌵", "🐙", "🍄", "🚀", "🌻", "🐝", "🎸", "🍒", "🐳", "🔮"]
+
+    /// A colour and emoji no other Space has yet, while there are any left.
+    static func fresh(avoiding taken: [Space], name: String) -> (SpaceColor, String) {
+        let colors = Set(taken.compactMap(\.color))
+        let emojis = Set(taken.compactMap(\.emoji))
+        let color = SpaceColor.allCases.first { !colors.contains($0) }
+            ?? SpaceColor.allCases[taken.count % SpaceColor.allCases.count]
+        let lower = name.lowercased()
+        let guess = lower.contains("home") ? "🏠" : lower.contains("work") ? "💼" : nil
+        let emoji = guess.flatMap { emojis.contains($0) ? nil : $0 }
+            ?? emoji.first { !emojis.contains($0) }
+            ?? emoji[taken.count % emoji.count]
+        return (color, emoji)
+    }
 }
 
 /// The live state of one Space: its data store and its tabs.
@@ -155,6 +205,13 @@ final class SpaceStore: ObservableObject {
         if loaded.isEmpty {
             loaded = [Space(id: UUID(), name: "Home"), Space(id: UUID(), name: "Work")]
         }
+        // Spaces saved before they had colours and emoji get their own now.
+        for index in loaded.indices where loaded[index].color == nil || loaded[index].emoji == nil {
+            let others = loaded.enumerated().filter { $0.offset != index }.map(\.element)
+            let (color, emoji) = SpaceLook.fresh(avoiding: others, name: loaded[index].name)
+            if loaded[index].color == nil { loaded[index].color = color }
+            if loaded[index].emoji == nil { loaded[index].emoji = emoji }
+        }
         states = loaded.map(SpaceState.init)
         selected = loaded[0].id
         save()
@@ -186,7 +243,8 @@ final class SpaceStore: ObservableObject {
         if let state = states.first(where: { $0.space.name.caseInsensitiveCompare(wanted) == .orderedSame }) {
             return state
         }
-        let state = SpaceState(space: Space(id: UUID(), name: wanted))
+        let (color, emoji) = SpaceLook.fresh(avoiding: states.map(\.space), name: wanted)
+        let state = SpaceState(space: Space(id: UUID(), name: wanted, color: color, emoji: emoji))
         states.append(state)
         save()
         return state
@@ -259,16 +317,25 @@ final class SpaceStore: ObservableObject {
         }
     }
 
-    func addSpace(named name: String) {
-        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
-        select(space(named: name).space.id)
+    /// A colour and emoji for a Space about to be made, for the New Space dialog.
+    func freshLook(for name: String) -> (SpaceColor, String) {
+        SpaceLook.fresh(avoiding: states.map(\.space), name: name)
     }
 
-    func rename(_ id: Space.ID, to name: String) {
+    func addSpace(named name: String, color: SpaceColor, emoji: String) {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        let state = space(named: name)
+        edit(state.space.id, name: name, color: color, emoji: emoji)
+        select(state.space.id)
+    }
+
+    func edit(_ id: Space.ID, name: String, color: SpaceColor, emoji: String) {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, !isNameTaken(name, except: id), let state = state(id) else { return }
         state.space.name = name
+        state.space.color = color
+        if !emoji.isEmpty { state.space.emoji = emoji }
         objectWillChange.send()
         save()
     }
@@ -356,16 +423,16 @@ final class SpaceStore: ObservableObject {
     }
 }
 
-/// The Space dialogs: naming a new one, renaming, confirming a delete.
+/// The Space dialogs: making a new one, editing, confirming a delete.
 enum SpacePrompt: Identifiable, Equatable {
     case new
-    case rename(Space.ID)
+    case edit(Space.ID)
     case delete(Space.ID)
 
     var id: String {
         switch self {
         case .new: "new"
-        case .rename(let id): "rename-\(id)"
+        case .edit(let id): "edit-\(id)"
         case .delete(let id): "delete-\(id)"
         }
     }

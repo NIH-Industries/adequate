@@ -50,7 +50,7 @@ struct AdequateCommands: Commands {
         }
         CommandMenu("Space") {
             Button("New Space…") { spaces.prompt = .new }.keyboardShortcut("n", modifiers: [.command, .shift])
-            Button("Rename Space…") { spaces.prompt = .rename(spaces.selected) }
+            Button("Edit Space…") { spaces.prompt = .edit(spaces.selected) }
             Button("Delete Space…") { spaces.prompt = .delete(spaces.selected) }
             Divider()
             Text("Switch Space: ⌃1–⌃9")

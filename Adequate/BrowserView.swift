@@ -40,6 +40,7 @@ struct Sidebar: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
+                Text(state.space.symbol)
                 Text(state.space.name).font(.headline).lineLimit(1)
                 Spacer()
                 Menu {
@@ -70,17 +71,20 @@ struct Sidebar: View {
             Divider()
             SpaceSwitcher(spaces: spaces)
         }
+        // A wash of the Space's colour, so you can tell at a glance where you are.
+        .background(state.space.tint.opacity(0.12))
+        .tint(state.space.tint)
     }
 }
 
-/// Rename, reorder and delete, shared by the header menu and each switcher dot.
+/// Edit, reorder and delete, shared by the header menu and each switcher dot.
 struct SpaceMenuItems: View {
     @ObservedObject var spaces: SpaceStore
     let id: Space.ID
 
     var body: some View {
         let index = spaces.states.firstIndex { $0.space.id == id } ?? 0
-        Button("Rename Space…") { spaces.prompt = .rename(id) }
+        Button("Edit Space…") { spaces.prompt = .edit(id) }
         Button("Move Left") { spaces.move(id, by: -1) }.disabled(index == 0)
         Button("Move Right") { spaces.move(id, by: 1) }.disabled(index == spaces.states.count - 1)
         Divider()
@@ -124,11 +128,12 @@ struct SpaceDot: View {
 
     var body: some View {
         Button(action: action) {
-            Text(String(state.space.name.prefix(1)).uppercased())
-                .font(.system(size: 12, weight: .semibold))
+            Text(state.space.symbol)
+                .font(.system(size: 14))
                 .frame(width: 26, height: 26)
-                .background(Circle().fill(selected ? Color.accentColor : Color.secondary.opacity(0.2)))
-                .foregroundStyle(selected ? Color.white : Color.primary)
+                .background(Circle().fill(state.space.tint.opacity(selected ? 0.9 : 0.3)))
+                .overlay(Circle().strokeBorder(Color.primary.opacity(selected ? 0.6 : 0), lineWidth: 1.5)
+                    .padding(-3))
         }
         .buttonStyle(.plain)
         .help(number <= 9 ? "\(state.space.name) (⌃\(number))" : state.space.name)
@@ -174,15 +179,27 @@ struct SpacePromptSheet: View {
     @ObservedObject var spaces: SpaceStore
     let prompt: SpacePrompt
     @State private var name = ""
+    @State private var emoji = ""
+    @State private var color = SpaceColor.blue
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             switch prompt {
             case .new:
-                nameForm(title: "New Space", action: "Create", except: nil) { spaces.addSpace(named: name) }
-            case .rename(let id):
-                nameForm(title: "Rename Space", action: "Rename", except: id) { spaces.rename(id, to: name) }
-                    .onAppear { name = spaces.state(id)?.space.name ?? "" }
+                nameForm(title: "New Space", action: "Create", except: nil) {
+                    spaces.addSpace(named: name, color: color, emoji: emoji)
+                }
+                .onAppear { (color, emoji) = spaces.freshLook(for: "") }
+            case .edit(let id):
+                nameForm(title: "Edit Space", action: "Save", except: id) {
+                    spaces.edit(id, name: name, color: color, emoji: emoji)
+                }
+                .onAppear {
+                    guard let space = spaces.state(id)?.space else { return }
+                    name = space.name
+                    emoji = space.symbol
+                    color = space.color ?? .blue
+                }
             case .delete(let id):
                 let spaceName = spaces.state(id)?.space.name ?? "this Space"
                 Text("Delete \(spaceName)?").font(.headline)
@@ -208,9 +225,32 @@ struct SpacePromptSheet: View {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let taken = spaces.isNameTaken(trimmed, except: except)
         Text(title).font(.headline)
-        TextField("Name", text: $name)
-            .textFieldStyle(.roundedBorder)
-            .onSubmit { if !trimmed.isEmpty && !taken { spaces.prompt = nil; commit() } }
+        HStack {
+            TextField("🙂", text: $emoji)
+                .textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.center)
+                .frame(width: 40)
+                .help("Emoji (⌃⌘Space for the picker)")
+                // Keep just the newest character typed or picked.
+                .onChange(of: emoji) { _, new in
+                    if new.count > 1, let last = new.last { emoji = String(last) }
+                }
+            TextField("Name", text: $name)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { if !trimmed.isEmpty && !taken { spaces.prompt = nil; commit() } }
+        }
+        HStack(spacing: 6) {
+            ForEach(SpaceColor.allCases) { choice in
+                Circle()
+                    .fill(choice.color)
+                    .frame(width: 20, height: 20)
+                    .overlay(Circle().strokeBorder(Color.primary, lineWidth: choice == color ? 2 : 0).padding(-3))
+                    .contentShape(Circle())
+                    .onTapGesture { color = choice }
+                    .help(choice.rawValue.capitalized)
+            }
+        }
+        .padding(.vertical, 2)
         if taken {
             Text("There's already a Space called \(trimmed).").font(.caption).foregroundStyle(.red)
         }
@@ -234,6 +274,7 @@ struct SpaceDetail: View {
             TabPage(tab: tab).id(tab.id)
         } else {
             VStack(spacing: 12) {
+                Text(state.space.symbol).font(.system(size: 64))
                 Text(state.space.name).font(.largeTitle)
                 Button("New Tab  ⌘T") { state.newTab() }
             }
