@@ -18,26 +18,55 @@ struct Space: Identifiable, Codable, Hashable {
     var symbol: String { emoji ?? String(name.prefix(1)).uppercased() }
 }
 
-/// The colours a Space can wear, saved by name.
-enum SpaceColor: String, Codable, CaseIterable, Identifiable {
-    case pink, red, orange, yellow, green, mint, teal, blue, indigo, purple, brown, gray
+/// The colour a Space wears, saved as one of the swatch names ("teal") or a
+/// custom "#rrggbb" picked from the colour panel or brought over from Arc.
+struct SpaceColor: RawRepresentable, Codable, Hashable, Identifiable {
+    let rawValue: String
+    init(rawValue: String) { self.rawValue = rawValue }
 
-    var id: Self { self }
+    static let pink = Self(rawValue: "pink"), red = Self(rawValue: "red"),
+        orange = Self(rawValue: "orange"), yellow = Self(rawValue: "yellow"),
+        green = Self(rawValue: "green"), mint = Self(rawValue: "mint"),
+        teal = Self(rawValue: "teal"), blue = Self(rawValue: "blue"),
+        indigo = Self(rawValue: "indigo"), purple = Self(rawValue: "purple"),
+        brown = Self(rawValue: "brown"), gray = Self(rawValue: "gray")
+
+    /// The named colours offered in the Space dialog.
+    static let swatches: [Self] = [.pink, .red, .orange, .yellow, .green, .mint,
+                                   .teal, .blue, .indigo, .purple, .brown, .gray]
+
+    /// A custom colour, kept as sRGB hex.
+    init(_ color: Color) {
+        let rgb = NSColor(color).usingColorSpace(.sRGB) ?? .systemBlue
+        let byte = { (c: CGFloat) in Int((min(max(c, 0), 1) * 255).rounded()) }
+        rawValue = String(format: "#%02x%02x%02x",
+                          byte(rgb.redComponent), byte(rgb.greenComponent), byte(rgb.blueComponent))
+    }
+
+    var id: String { rawValue }
+    var isCustom: Bool { rawValue.hasPrefix("#") }
 
     var color: Color {
-        switch self {
-        case .pink: .pink
-        case .red: .red
-        case .orange: .orange
-        case .yellow: .yellow
-        case .green: .green
-        case .mint: .mint
-        case .teal: .teal
-        case .blue: .blue
-        case .indigo: .indigo
-        case .purple: .purple
-        case .brown: .brown
-        case .gray: .gray
+        switch rawValue {
+        case "pink": .pink
+        case "red": .red
+        case "orange": .orange
+        case "yellow": .yellow
+        case "green": .green
+        case "mint": .mint
+        case "teal": .teal
+        case "blue": .blue
+        case "indigo": .indigo
+        case "purple": .purple
+        case "brown": .brown
+        case "gray": .gray
+        default:
+            if isCustom, rawValue.count == 7, let value = UInt32(rawValue.dropFirst(), radix: 16) {
+                Color(.sRGB, red: Double(value >> 16 & 0xff) / 255,
+                      green: Double(value >> 8 & 0xff) / 255, blue: Double(value & 0xff) / 255)
+            } else {
+                .blue
+            }
         }
     }
 }
@@ -49,8 +78,8 @@ enum SpaceLook {
     static func fresh(avoiding taken: [Space], name: String) -> (SpaceColor, String) {
         let colors = Set(taken.compactMap(\.color))
         let emojis = Set(taken.compactMap(\.emoji))
-        let color = SpaceColor.allCases.first { !colors.contains($0) }
-            ?? SpaceColor.allCases[taken.count % SpaceColor.allCases.count]
+        let color = SpaceColor.swatches.first { !colors.contains($0) }
+            ?? SpaceColor.swatches[taken.count % SpaceColor.swatches.count]
         let lower = name.lowercased()
         let guess = lower.contains("home") ? "🏠" : lower.contains("work") ? "💼" : nil
         let emoji = guess.flatMap { emojis.contains($0) ? nil : $0 }

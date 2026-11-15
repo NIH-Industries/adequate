@@ -240,7 +240,7 @@ struct SpacePromptSheet: View {
                 .onSubmit { if !trimmed.isEmpty && !taken { spaces.prompt = nil; commit() } }
         }
         HStack(spacing: 6) {
-            ForEach(SpaceColor.allCases) { choice in
+            ForEach(SpaceColor.swatches) { choice in
                 Circle()
                     .fill(choice.color)
                     .frame(width: 20, height: 20)
@@ -249,6 +249,13 @@ struct SpacePromptSheet: View {
                     .onTapGesture { color = choice }
                     .help(choice.rawValue.capitalized)
             }
+            // Anything else, from the system colour panel.
+            ColorPicker("", selection: Binding(get: { color.color }, set: { color = SpaceColor($0) }),
+                        supportsOpacity: false)
+                .labelsHidden()
+                .overlay(Circle().strokeBorder(Color.primary, lineWidth: color.isCustom ? 2 : 0)
+                    .frame(width: 26, height: 26).allowsHitTesting(false))
+                .help("Custom colour")
         }
         .padding(.vertical, 2)
         if taken {
