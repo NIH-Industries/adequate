@@ -1,0 +1,41 @@
+name: Adequate
+options:
+  bundleIdPrefix: com.nih-industries
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    ENABLE_HARDENED_RUNTIME: NO
+targets:
+  Adequate:
+    type: application
+    platform: macOS
+    sources: [Adequate]
+    info:
+      path: Adequate/Info.plist
+      properties:
+        CFBundleDisplayName: Adequate
+        LSApplicationCategoryType: public.app-category.productivity
+        NSHumanReadableCopyright: "NIH Industries"
+        CFBundleURLTypes:
+          - CFBundleURLName: com.nih-industries.adequate
+            CFBundleURLSchemes: [adequate]
+          - CFBundleURLName: Web site URL
+            CFBundleTypeRole: Viewer
+            CFBundleURLSchemes: [http, https]
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: HTML document
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.html, public.xhtml]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nih-industries.adequate
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

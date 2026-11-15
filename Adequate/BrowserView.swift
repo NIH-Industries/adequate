@@ -1,0 +1,289 @@
+import SwiftUI
+import WebKit
+
+struct BrowserView: View {
+    @ObservedObject var spaces: SpaceStore
+
+    var body: some View {
+        NavigationSplitView(columnVisibility: Binding(
+            get: { spaces.sidebarShown ? .all : .detailOnly },
+            set: { spaces.sidebarShown = $0 != .detailOnly }
+        )) {
+            Sidebar(spaces: spaces, state: spaces.current)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+        } detail: {
+            SpaceDetail(state: spaces.current)
+                .id(spaces.selected)
+        }
+        .overlay(alignment: .bottom) {
+            if let toast = spaces.toast {
+                Text(toast)
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.bottom, 24)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: spaces.toast)
+        .sheet(item: $spaces.prompt) { prompt in
+            SpacePromptSheet(spaces: spaces, prompt: prompt)
+        }
+    }
+}
+
+// MARK: Sidebar
+
+struct Sidebar: View {
+    @ObservedObject var spaces: SpaceStore
+    @ObservedObject var state: SpaceState
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(state.space.name).font(.headline).lineLimit(1)
+                Spacer()
+                Menu {
+                    SpaceMenuItems(spaces: spaces, id: state.space.id)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+
+            Button { state.newTab() } label: {
+                Label("New Tab", systemImage: "plus").frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.borderless)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+
+            List(selection: $state.selectedTabID) {
+                ForEach(state.tabs) { tab in
+                    TabRow(tab: tab) { state.close(tab.id) }.tag(tab.id)
+                }
+            }
+
+            Divider()
+            SpaceSwitcher(spaces: spaces)
+        }
+    }
+}
+
+/// Rename, reorder and delete, shared by the header menu and each switcher dot.
+struct SpaceMenuItems: View {
+    @ObservedObject var spaces: SpaceStore
+    let id: Space.ID
+
+    var body: some View {
+        let index = spaces.states.firstIndex { $0.space.id == id } ?? 0
+        Button("Rename Space…") { spaces.prompt = .rename(id) }
+        Button("Move Left") { spaces.move(id, by: -1) }.disabled(index == 0)
+        Button("Move Right") { spaces.move(id, by: 1) }.disabled(index == spaces.states.count - 1)
+        Divider()
+        Button("Delete Space…", role: .destructive) { spaces.prompt = .delete(id) }
+            .disabled(spaces.states.count < 2)
+        Divider()
+        Button("New Space…") { spaces.prompt = .new }
+    }
+}
+
+/// One dot per Space along the bottom of the sidebar, like Arc's.
+struct SpaceSwitcher: View {
+    @ObservedObject var spaces: SpaceStore
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(Array(spaces.states.enumerated()), id: \.element.space.id) { index, state in
+                        SpaceDot(state: state, number: index + 1, selected: state.space.id == spaces.selected) {
+                            spaces.select(state.space.id)
+                        }
+                        .contextMenu { SpaceMenuItems(spaces: spaces, id: state.space.id) }
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            Button { spaces.prompt = .new } label: { Image(systemName: "plus") }
+                .buttonStyle(.borderless)
+                .help("New Space (⇧⌘N)")
+        }
+        .padding(10)
+    }
+}
+
+struct SpaceDot: View {
+    @ObservedObject var state: SpaceState
+    let number: Int
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(String(state.space.name.prefix(1)).uppercased())
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 26, height: 26)
+                .background(Circle().fill(selected ? Color.accentColor : Color.secondary.opacity(0.2)))
+                .foregroundStyle(selected ? Color.white : Color.primary)
+        }
+        .buttonStyle(.plain)
+        .help(number <= 9 ? "\(state.space.name) (⌃\(number))" : state.space.name)
+    }
+}
+
+struct TabRow: View {
+    @ObservedObject var tab: Tab
+    let close: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Group {
+                if let favicon = tab.favicon {
+                    Image(nsImage: favicon).resizable().interpolation(.high)
+                } else {
+                    Image(systemName: "globe").foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 16, height: 16)
+            Text(tab.displayTitle).lineLimit(1)
+            Spacer()
+            if hovering {
+                Button(action: close) { Image(systemName: "xmark") }.buttonStyle(.borderless)
+            }
+        }
+        .onHover { hovering = $0 }
+        .contextMenu {
+            Button("Copy Link") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(tab.address, forType: .string)
+            }
+            .disabled(tab.address.isEmpty)
+            Button("Close Tab", action: close)
+        }
+    }
+}
+
+// MARK: Space dialogs
+
+struct SpacePromptSheet: View {
+    @ObservedObject var spaces: SpaceStore
+    let prompt: SpacePrompt
+    @State private var name = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            switch prompt {
+            case .new:
+                nameForm(title: "New Space", action: "Create", except: nil) { spaces.addSpace(named: name) }
+            case .rename(let id):
+                nameForm(title: "Rename Space", action: "Rename", except: id) { spaces.rename(id, to: name) }
+                    .onAppear { name = spaces.state(id)?.space.name ?? "" }
+            case .delete(let id):
+                let spaceName = spaces.state(id)?.space.name ?? "this Space"
+                Text("Delete \(spaceName)?").font(.headline)
+                Text("Its tabs close, and its cookies, logins and site data are erased. This can't be undone.")
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Spacer()
+                    Button("Cancel", role: .cancel) { spaces.prompt = nil }.keyboardShortcut(.cancelAction)
+                    Button("Delete", role: .destructive) {
+                        spaces.prompt = nil
+                        spaces.delete(id)
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+        }
+        .padding(20)
+        .frame(width: 340)
+    }
+
+    @ViewBuilder
+    private func nameForm(title: String, action: String, except: Space.ID?, commit: @escaping () -> Void) -> some View {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let taken = spaces.isNameTaken(trimmed, except: except)
+        Text(title).font(.headline)
+        TextField("Name", text: $name)
+            .textFieldStyle(.roundedBorder)
+            .onSubmit { if !trimmed.isEmpty && !taken { spaces.prompt = nil; commit() } }
+        if taken {
+            Text("There's already a Space called \(trimmed).").font(.caption).foregroundStyle(.red)
+        }
+        HStack {
+            Spacer()
+            Button("Cancel", role: .cancel) { spaces.prompt = nil }.keyboardShortcut(.cancelAction)
+            Button(action) { spaces.prompt = nil; commit() }
+                .keyboardShortcut(.defaultAction)
+                .disabled(trimmed.isEmpty || taken)
+        }
+    }
+}
+
+// MARK: Page
+
+struct SpaceDetail: View {
+    @ObservedObject var state: SpaceState
+
+    var body: some View {
+        if let tab = state.selectedTab {
+            TabPage(tab: tab).id(tab.id)
+        } else {
+            VStack(spacing: 12) {
+                Text(state.space.name).font(.largeTitle)
+                Button("New Tab  ⌘T") { state.newTab() }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+struct TabPage: View {
+    @ObservedObject var tab: Tab
+    @State private var draft = ""
+    @FocusState private var addressFocused: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 4) {
+                Button(action: tab.goBack) { Image(systemName: "chevron.left") }
+                    .disabled(!tab.canGoBack).help("Back (⌘[)")
+                Button(action: tab.goForward) { Image(systemName: "chevron.right") }
+                    .disabled(!tab.canGoForward).help("Forward (⌘])")
+                Button(action: tab.reload) { Image(systemName: tab.isLoading ? "xmark" : "arrow.clockwise") }
+                    .help(tab.isLoading ? "Stop" : "Reload (⌘R)")
+                TextField("Search or enter address", text: $draft)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($addressFocused)
+                    .onSubmit { tab.load(draft); addressFocused = false }
+                    .padding(.leading, 4)
+            }
+            .buttonStyle(.borderless)
+            .padding(8)
+            WebViewHost(webView: tab.webView)
+        }
+        .onAppear {
+            draft = tab.address
+            // A blank tab wants an address; one opened with a page wants the page.
+            if tab.isBlank { addressFocused = true } else { tab.focusPage() }
+        }
+        .onChange(of: tab.address) { _, address in
+            if !addressFocused || draft.isEmpty { draft = address }
+        }
+        .onChange(of: tab.focusRequest) { _, _ in
+            draft = tab.address
+            addressFocused = true
+        }
+        .onChange(of: addressFocused) { _, focused in if !focused { draft = tab.address } }
+    }
+}
+
+struct WebViewHost: NSViewRepresentable {
+    let webView: WKWebView
+    func makeNSView(context: Context) -> WKWebView { webView }
+    func updateNSView(_ nsView: WKWebView, context: Context) {}
+}
