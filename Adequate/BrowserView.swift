@@ -10,11 +10,14 @@ struct BrowserView: View {
             set: { spaces.sidebarShown = $0 != .detailOnly }
         )) {
             Sidebar(spaces: spaces, state: spaces.current)
+                .toolbar(removing: .sidebarToggle)
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240)
         } detail: {
             SpaceDetail(state: spaces.current)
                 .id(spaces.selected)
         }
+        // No title bar or toolbar: ⌘S shows and hides the sidebar.
+        .toolbar(.hidden, for: .windowToolbar)
         .overlay(alignment: .bottom) {
             if let toast = spaces.toast {
                 Text(toast)
@@ -64,7 +67,9 @@ struct Sidebar: View {
 
             List(selection: $state.selectedTabID) {
                 ForEach(state.tabs) { tab in
-                    TabRow(tab: tab) { state.close(tab.id) }.tag(tab.id)
+                    TabRow(tab: tab, close: { state.close(tab.id) },
+                           popOut: { spaces.openInNewWindow(tab.id, from: state) })
+                        .tag(tab.id)
                 }
             }
 
@@ -134,6 +139,15 @@ struct SpaceDot: View {
                 .background(Circle().fill(state.space.tint.opacity(selected ? 0.9 : 0.3)))
                 .overlay(Circle().strokeBorder(Color.primary.opacity(selected ? 0.6 : 0), lineWidth: 1.5)
                     .padding(-3))
+                .overlay(alignment: .topTrailing) {
+                    if !state.audibleTabs.isEmpty {
+                        Image(systemName: "speaker.wave.2.fill")
+                            .font(.system(size: 7, weight: .bold))
+                            .padding(2.5)
+                            .background(Circle().fill(.background))
+                            .offset(x: 4, y: -4)
+                    }
+                }
         }
         .buttonStyle(.plain)
         .help(number <= 9 ? "\(state.space.name) (⌃\(number))" : state.space.name)
@@ -143,6 +157,7 @@ struct SpaceDot: View {
 struct TabRow: View {
     @ObservedObject var tab: Tab
     let close: () -> Void
+    let popOut: () -> Void
     @State private var hovering = false
 
     var body: some View {
@@ -156,7 +171,16 @@ struct TabRow: View {
             }
             .frame(width: 16, height: 16)
             Text(tab.displayTitle).lineLimit(1)
+                .help(tab.address)
             Spacer()
+            if tab.isPlayingAudio || tab.isMuted {
+                Button(action: tab.toggleMute) {
+                    Image(systemName: tab.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .help(tab.isMuted ? "Unmute Tab" : "Mute Tab")
+            }
             if hovering {
                 Button(action: close) { Image(systemName: "xmark") }.buttonStyle(.borderless)
             }
@@ -168,6 +192,10 @@ struct TabRow: View {
                 NSPasteboard.general.setString(tab.address, forType: .string)
             }
             .disabled(tab.address.isEmpty)
+            Button(tab.isMuted ? "Unmute Tab" : "Mute Tab", action: tab.toggleMute)
+            Button("Pause Media", action: tab.pauseMedia).disabled(!tab.isPlayingAudio)
+            Divider()
+            Button("Open in New Window", action: popOut)
             Button("Close Tab", action: close)
         }
     }
@@ -290,48 +318,112 @@ struct SpaceDetail: View {
     }
 }
 
+/// The page fills the whole window, right up under the title bar. The address
+/// bar only floats over it while you're using it: ⌘L, or a blank tab.
 struct TabPage: View {
     @ObservedObject var tab: Tab
     @State private var draft = ""
+    @State private var editing = false
     @FocusState private var addressFocused: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 4) {
-                Button(action: tab.goBack) { Image(systemName: "chevron.left") }
-                    .disabled(!tab.canGoBack).help("Back (⌘[)")
-                Button(action: tab.goForward) { Image(systemName: "chevron.right") }
-                    .disabled(!tab.canGoForward).help("Forward (⌘])")
-                Button(action: tab.reload) { Image(systemName: tab.isLoading ? "xmark" : "arrow.clockwise") }
-                    .help(tab.isLoading ? "Stop" : "Reload (⌘R)")
-                TextField("Search or enter address", text: $draft)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($addressFocused)
-                    .onSubmit { tab.load(draft); addressFocused = false }
-                    .padding(.leading, 4)
+        WebViewHost(webView: tab.webView)
+            .ignoresSafeArea()
+            .overlay(alignment: .top) {
+                if tab.isLoading {
+                    ProgressView(value: max(tab.progress, 0.05))
+                        .progressViewStyle(.linear)
+                        .controlSize(.small)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                }
             }
-            .buttonStyle(.borderless)
-            .padding(8)
-            WebViewHost(webView: tab.webView)
+            .overlay(alignment: .top) {
+                if editing { addressBar }
+            }
+            .onAppear {
+                draft = tab.address
+                // A blank tab wants an address; one opened with a page wants the page.
+                if tab.isBlank { edit() } else { tab.focusPage() }
+            }
+            .onChange(of: tab.address) { _, address in
+                if !addressFocused || draft.isEmpty { draft = address }
+            }
+            .onChange(of: tab.focusRequest) { _, _ in edit() }
+            .onChange(of: addressFocused) { _, focused in
+                if !focused { finish() }
+            }
+    }
+
+    private var addressBar: some View {
+        HStack(spacing: 6) {
+            Button(action: tab.goBack) { Image(systemName: "chevron.left") }
+                .disabled(!tab.canGoBack).help("Back (⌘[)")
+            Button(action: tab.goForward) { Image(systemName: "chevron.right") }
+                .disabled(!tab.canGoForward).help("Forward (⌘])")
+            Button(action: tab.reload) { Image(systemName: tab.isLoading ? "xmark" : "arrow.clockwise") }
+                .help(tab.isLoading ? "Stop" : "Reload (⌘R)")
+            // Taking focus selects the whole address, ready to type over.
+            TextField("Search or enter address", text: $draft)
+                .textFieldStyle(.plain)
+                .font(.system(size: 14))
+                .focused($addressFocused)
+                .onSubmit {
+                    tab.load(draft)
+                    finish()
+                }
+                .onExitCommand {
+                    finish()
+                    tab.focusPage()
+                }
         }
-        .onAppear {
-            draft = tab.address
-            // A blank tab wants an address; one opened with a page wants the page.
-            if tab.isBlank { addressFocused = true } else { tab.focusPage() }
-        }
-        .onChange(of: tab.address) { _, address in
-            if !addressFocused || draft.isEmpty { draft = address }
-        }
-        .onChange(of: tab.focusRequest) { _, _ in
-            draft = tab.address
-            addressFocused = true
-        }
-        .onChange(of: addressFocused) { _, focused in if !focused { draft = tab.address } }
+        .buttonStyle(.borderless)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .frame(maxWidth: 720)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator))
+        .shadow(radius: 12, y: 4)
+        .padding(.horizontal, 24)
+        .padding(.top, 10)
+    }
+
+    private func edit() {
+        draft = tab.address
+        editing = true
+        // The field has to exist before it can take focus.
+        DispatchQueue.main.async { addressFocused = true }
+    }
+
+    private func finish() {
+        editing = false
+        addressFocused = false
+        draft = tab.address
     }
 }
 
+/// Holds a tab's web view. The web view lives in a container, so when a tab
+/// moves to another window, the old place letting go can't pull it back out.
 struct WebViewHost: NSViewRepresentable {
     let webView: WKWebView
-    func makeNSView(context: Context) -> WKWebView { webView }
-    func updateNSView(_ nsView: WKWebView, context: Context) {}
+
+    func makeNSView(context: Context) -> NSView {
+        let container = NSView()
+        adopt(into: container)
+        return container
+    }
+
+    func updateNSView(_ container: NSView, context: Context) { adopt(into: container) }
+
+    static func dismantleNSView(_ container: NSView, coordinator: ()) {
+        container.subviews.forEach { $0.removeFromSuperview() }
+    }
+
+    private func adopt(into container: NSView) {
+        guard webView.superview !== container else { return }
+        webView.removeFromSuperview()
+        webView.frame = container.bounds
+        webView.autoresizingMask = [.width, .height]
+        container.addSubview(webView)
+    }
 }

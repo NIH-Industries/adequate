@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 @main
@@ -45,6 +46,15 @@ struct AdequateCommands: Commands {
             Divider()
             Button("Previous Tab") { spaces.current.selectAdjacentTab(-1) }.keyboardShortcut("[", modifiers: [.command, .shift])
             Button("Next Tab") { spaces.current.selectAdjacentTab(1) }.keyboardShortcut("]", modifiers: [.command, .shift])
+            Divider()
+            Button("Mute / Unmute Tab") { spaces.current.selectedTab?.toggleMute() }
+            Button("Go to Tab Playing Sound") { spaces.showPlayingTab() }
+                .keyboardShortcut("a", modifiers: [.command, .shift])
+            Button("Pause All Media") { spaces.pauseAllMedia() }
+            Button("Open Tab in New Window") {
+                if let id = spaces.current.selectedTabID { spaces.openInNewWindow(id, from: spaces.current) }
+            }
+            Divider()
             Text("Recent Tabs: ⌃Tab / ⌃⇧Tab")
             Text("Tab 1–8: ⌘1–⌘8, Last Tab: ⌘9")
         }
@@ -62,6 +72,7 @@ struct AdequateCommands: Commands {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let spaces = SpaceStore()
     private var window: NSWindow?
+    private var sidebarWatch: AnyCancellable?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Take links ourselves, before SwiftUI can turn them into windows.
@@ -102,12 +113,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                 backing: .buffered, defer: false)
             window.title = "Adequate"
+            // The page goes right up to the top edge; the traffic lights sit
+            // over the sidebar, and the sidebar's empty space drags the window.
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+            window.isMovableByWindowBackground = true
             window.isReleasedWhenClosed = false
             window.contentViewController = NSHostingController(
                 rootView: BrowserView(spaces: spaces).frame(minWidth: 800, minHeight: 600))
             window.setFrameAutosaveName("AdequateMain")
             if !window.setFrameUsingName("AdequateMain") { window.center() }
             self.window = window
+            spaces.mainWindow = window
+            // With the sidebar hidden they'd sit on the page, so they go too.
+            sidebarWatch = spaces.$sidebarShown.sink { [weak window] shown in
+                for kind in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+                    window?.standardWindowButton(kind)?.isHidden = !shown
+                }
+            }
         }
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate()

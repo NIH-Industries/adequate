@@ -11,7 +11,11 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     @Published var canGoBack = false
     @Published var canGoForward = false
     @Published var isLoading = false
+    @Published var progress = 0.0
     @Published var favicon: NSImage?
+    /// Some frame of the page is playing sound (or would be, if muted).
+    @Published private(set) var isPlayingAudio = false
+    @Published private(set) var isMuted = false
     /// Bumped to ask the address bar to take focus.
     @Published var focusRequest = 0
     /// True until something is loaded: only a blank tab starts in the address bar.
@@ -23,8 +27,14 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     /// Opens a ⌘-clicked link as a background tab in the same Space.
     var onOpenInBackground: ((URL) -> Void)?
     var onClose: (() -> Void)?
+    /// The Space's memory of which sites may use the camera and microphone.
+    var permissions: SitePermissions?
     private var observations: [NSKeyValueObservation] = []
     private var faviconHost: String?
+    /// Frames that have told MediaWatch about their media, by the id each
+    /// page's script picks, and which of them are playing sound.
+    private var mediaFrames: [String: WKFrameInfo] = [:]
+    private var audibleFrames: Set<String> = []
 
     init(configuration: WKWebViewConfiguration) {
         webView = WKWebView(frame: .zero, configuration: configuration)
@@ -49,6 +59,9 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
             },
             webView.observe(\.isLoading, options: [.initial, .new]) { [weak self] webView, _ in
                 MainActor.assumeIsolated { self?.isLoading = webView.isLoading }
+            },
+            webView.observe(\.estimatedProgress, options: [.initial, .new]) { [weak self] webView, _ in
+                MainActor.assumeIsolated { self?.progress = webView.estimatedProgress }
             },
         ]
     }
@@ -109,6 +122,26 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
         if isLoading { webView.stopLoading() } else { webView.reload() }
     }
     func goBack() { webView.goBack() }
+
+    // MARK: Sound
+
+    func mediaReport(frame: String, playing: Bool, info: WKFrameInfo) {
+        mediaFrames[frame] = info
+        if playing { audibleFrames.insert(frame) } else { audibleFrames.remove(frame) }
+        isPlayingAudio = !audibleFrames.isEmpty
+        // A frame that came along after the tab was muted.
+        if isMuted, playing { MediaWatch.setMuted(true, in: webView, frame: info) }
+    }
+
+    func toggleMute() {
+        isMuted.toggle()
+        for info in mediaFrames.values { MediaWatch.setMuted(isMuted, in: webView, frame: info) }
+    }
+
+    func pauseMedia() {
+        webView.pauseAllMediaPlayback {}
+    }
+
     func goForward() { webView.goForward() }
     func zoom(by step: CGFloat?) {
         webView.pageZoom = step.map { min(max(webView.pageZoom + $0, 0.3), 3) } ?? 1
@@ -135,6 +168,60 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
         onOpenTab?(configuration)
     }
 
+    /// A page wants the camera or microphone (getUserMedia): ask, once per
+    /// site per Space while Adequate is open.
+    func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+                 initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
+                 decisionHandler: @escaping @MainActor (WKPermissionDecision) -> Void) {
+        let site = Self.site(origin)
+        let what = switch type {
+        case .camera: "camera"
+        case .microphone: "microphone"
+        default: "camera and microphone"
+        }
+        let key = "\(site) \(type.rawValue)"
+        if permissions?.allowed.contains(key) == true { return decisionHandler(.grant) }
+        ask("Allow \(site) to use your \(what)?", buttons: ["Allow", "Don't Allow"]) { [weak self] choice in
+            if choice == 0 { self?.permissions?.allowed.insert(key) }
+            decisionHandler(choice == 0 ? .grant : .deny)
+        }
+    }
+
+    /// A page wants to share the screen (getDisplayMedia). WebKit's private
+    /// delegate method: answer with what macOS's picker should offer
+    /// (0 deny, 1 a screen, 2 a window).
+    @objc(_webView:requestDisplayCapturePermissionForOrigin:initiatedByFrame:withSystemAudio:decisionHandler:)
+    func webView(_ webView: WKWebView, requestDisplayCaptureFor origin: WKSecurityOrigin,
+                 initiatedByFrame frame: WKFrameInfo, withSystemAudio: Bool,
+                 decisionHandler: @escaping (Int) -> Void) {
+        ask("Share your screen with \(Self.site(origin))?",
+            detail: "To share one tab, right-click it in the sidebar and choose Open in New Window, then pick that window.",
+            buttons: ["Window…", "Entire Screen…", "Cancel"]) { choice in
+            decisionHandler([2, 1, 0][min(choice, 2)])
+        }
+    }
+
+    private static func site(_ origin: WKSecurityOrigin) -> String {
+        origin.port == 0 ? origin.host : "\(origin.host):\(origin.port)"
+    }
+
+    /// An alert on the tab's window; `then` gets the index of the button pressed.
+    private func ask(_ message: String, detail: String? = nil, buttons: [String],
+                     then: @escaping (Int) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = message
+        if let detail { alert.informativeText = detail }
+        buttons.forEach { alert.addButton(withTitle: $0) }
+        let index = { (response: NSApplication.ModalResponse) in
+            response.rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
+        }
+        if let window = webView.window {
+            alert.beginSheetModal(for: window) { then(index($0)) }
+        } else {
+            then(index(alert.runModal()))
+        }
+    }
+
     func webViewDidClose(_ webView: WKWebView) {
         // window.close() from a pop-up, e.g. at the end of an OAuth sign-in.
         onClose?()
@@ -156,6 +243,13 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
             return decisionHandler(.cancel)
         }
         decisionHandler(.allow)
+    }
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        // A new page: the old one's frames and sound are gone. Muting stays with the tab.
+        mediaFrames = [:]
+        audibleFrames = []
+        isPlayingAudio = false
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

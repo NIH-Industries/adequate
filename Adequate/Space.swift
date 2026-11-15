@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import Security
 import Foundation
@@ -103,6 +104,12 @@ final class SpaceState: ObservableObject {
     private var mru: [Tab.ID] = []
     private var cycleOrder: [Tab.ID] = []
     private var cycleIndex: Int?
+    /// Camera and microphone allowed for sites in this Space, until Adequate quits.
+    let permissions = SitePermissions()
+    /// Passes each tab's sound changes up, so the Space's dot can show them.
+    private var soundWatches: [Tab.ID: AnyCancellable] = [:]
+
+    var audibleTabs: [Tab] { tabs.filter(\.isPlayingAudio) }
 
     init(space: Space) {
         self.space = space
@@ -125,9 +132,19 @@ final class SpaceState: ObservableObject {
             // Undocumented but long-standing: adds Inspect Element to the
             // context menu and lets Tab.showDeveloperTools open the inspector.
             config.preferences.setValue(true, forKey: "developerExtrasEnabled")
+            // Camera and microphone for pages (getUserMedia), off by default in a
+            // WKWebView. Private switches: if they go, video calls just can't start.
+            if config.preferences.responds(to: Selector(("_setMediaDevicesEnabled:"))) {
+                config.preferences.setValue(true, forKey: "mediaDevicesEnabled")
+            }
+            if config.responds(to: Selector(("_setMediaCaptureEnabled:"))) {
+                config.setValue(true, forKey: "mediaCaptureEnabled")
+            }
+            MediaWatch.install(in: config, for: self)
             return config
         }()
         let tab = Tab(configuration: config)
+        tab.permissions = permissions
         // A pop-up or target=_blank link: WebKit loads its page into this tab.
         if configuration != nil { tab.isBlank = false }
         tab.onOpenTab = { [weak self] configuration in
@@ -139,6 +156,8 @@ final class SpaceState: ObservableObject {
         tab.onOpenInBackground = { [weak self] url in
             self?.newTab(background: true).load(url: url)
         }
+        soundWatches[tab.id] = tab.$isPlayingAudio.removeDuplicates().dropFirst()
+            .sink { [weak self] _ in self?.objectWillChange.send() }
         if background, let current = tabs.firstIndex(where: { $0.id == selectedTabID }) {
             tabs.insert(tab, at: current + 1)
             mru.insert(tab.id, at: min(1, mru.count))
@@ -166,6 +185,7 @@ final class SpaceState: ObservableObject {
     func closeAll() {
         tabs.forEach { $0.webView.stopLoading() }
         tabs = []
+        soundWatches = [:]
         mru = []
         selectedTabID = nil
     }
@@ -174,8 +194,19 @@ final class SpaceState: ObservableObject {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         tabs[index].webView.stopLoading()
         tabs.remove(at: index)
+        soundWatches[id] = nil
         mru.removeAll { $0 == id }
         if selectedTabID == id { selectedTabID = mru.first }
+    }
+
+    /// Takes a tab out of the sidebar, still loaded, to live in a window of its own.
+    func detach(_ id: Tab.ID) -> Tab? {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return nil }
+        let tab = tabs.remove(at: index)
+        mru.removeAll { $0 == id }
+        soundWatches[id] = nil
+        if selectedTabID == id { selectedTabID = mru.first }
+        return tab
     }
 
     func closeSelected() -> Bool {
@@ -227,6 +258,9 @@ final class SpaceStore: ObservableObject {
     private var toastTask: Task<Void, Never>?
     /// Brings the main window back, set once the window has appeared.
     var showWindow: (() -> Void)?
+    /// The browser window, so shortcuts meant for it don't fire in others.
+    weak var mainWindow: NSWindow?
+    private var tabWindows: [TabWindow] = []
     private var keyMonitor: Any?
 
     init() {
@@ -337,6 +371,28 @@ final class SpaceStore: ObservableObject {
         selected = id
     }
 
+    /// ⇧⌘A: the next tab making sound, in any Space, after the one you're on.
+    func showPlayingTab() {
+        let playing = states.flatMap { state in state.audibleTabs.map { (state, $0) } }
+        guard !playing.isEmpty else { return show(toast: "Nothing's playing") }
+        let here = playing.firstIndex { $0.1.id == current.selectedTabID && $0.0 === current }
+        let (state, tab) = playing[here.map { ($0 + 1) % playing.count } ?? 0]
+        select(state.space.id)
+        state.selectedTabID = tab.id
+    }
+
+    /// Pops a tab out into its own window, e.g. to share just it in a call.
+    func openInNewWindow(_ id: Tab.ID, from state: SpaceState) {
+        guard let tab = state.detach(id) else { return }
+        let window = TabWindow(tab: tab, near: mainWindow)
+        window.onClose = { [weak self, weak window] in self?.tabWindows.removeAll { $0 === window } }
+        tabWindows.append(window)
+    }
+
+    func pauseAllMedia() {
+        states.flatMap(\.audibleTabs).forEach { $0.pauseMedia() }
+    }
+
     func state(_ id: Space.ID) -> SpaceState? { states.first { $0.space.id == id } }
 
     func isNameTaken(_ name: String, except id: Space.ID? = nil) -> Bool {
@@ -414,6 +470,19 @@ final class SpaceStore: ObservableObject {
         }
 
         let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
+        // A popped-out tab's window gets the page keys; ⌘W closes it as usual.
+        if let popped = tabWindows.first(where: { $0.window === event.window })?.tab {
+            switch (flags, key) {
+            case ([.command], "l"): popped.focusRequest += 1
+            case ([.command], "r"): popped.reload()
+            case ([.command], "["): popped.goBack()
+            case ([.command], "]"): popped.goForward()
+            case ([.command, .option], "i"): popped.showDeveloperTools()
+            default: return event
+            }
+            return nil
+        }
+        if let window = event.window, window !== mainWindow { return event }
         let tab = current.selectedTab
         let tabKey: UInt16 = 48
 
@@ -441,6 +510,7 @@ final class SpaceStore: ObservableObject {
         case ([.command, .option], "}"), ([.command, .shift], "]"), ([.command, .shift], "}"):
             current.selectAdjacentTab(1)
         case ([.command, .shift], "n"): prompt = .new
+        case ([.command, .shift], "a"): showPlayingTab()
         case ([.command], _) where Int(key).map { (1...9).contains($0) } == true:
             current.selectTab(number: Int(key)!)
         case ([.control], _) where Int(key).map { (1...9).contains($0) } == true:
@@ -487,4 +557,11 @@ enum CLIToken {
                            attributes: [.posixPermissions: 0o600])
         return token
     }()
+}
+
+/// Which sites may use the camera and microphone. Only "Allow" is remembered,
+/// so a site you refused can ask again.
+@MainActor
+final class SitePermissions {
+    var allowed: Set<String> = []
 }

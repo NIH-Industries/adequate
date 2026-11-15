@@ -14,6 +14,12 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
   Use Adequate › Make Adequate the Default Browser.
 - **No extensions**: WKWebView apps can't load them, so passwords come from
   the 1Password app (Quick Access, ⌘⇧Space) by copy and paste.
+- **Sound**: a tab playing sound shows a speaker (click it to mute), and its
+  Space's dot gets one too. Tab › Pause All Media hushes everything.
+- **Video calls**: pages can use the camera and microphone once you allow
+  them (asked once per site per Space, until Adequate quits), and share a
+  window or the whole screen. To share one tab, right-click it and choose
+  Open in New Window, then pick that window.
 - **Fresh start**: tabs aren't kept between launches; Spaces and logins are.
 
 ## Keys
@@ -21,7 +27,7 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
 | key | does |
 |---|---|
 | ⌘T / ⌘W | new tab / close tab |
-| ⌘L | address bar |
+| ⌘L | address bar (it floats over the page) |
 | ⌘S | show / hide the sidebar |
 | ⌘⇧C | copy the current page's address |
 | ⌘[ / ⌘] | back / forward |
@@ -32,6 +38,7 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
 | ⌘1–⌘8, ⌘9 | tab by position, last tab |
 | ⌃1–⌃9 | Space by position |
 | ⌘⇧N | new Space |
+| ⌘⇧A | next tab playing sound, in any Space |
 | ⌘= / ⌘- / ⌘0 | zoom in / out / actual size |
 | ⌘-click a link | open it in a background tab |
 
