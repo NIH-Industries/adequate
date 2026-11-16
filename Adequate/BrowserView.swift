@@ -180,6 +180,8 @@ struct TabRow: View {
                 Button(action: close) { Image(systemName: "xmark") }.buttonStyle(.borderless)
             }
         }
+        // Room to breathe between tabs.
+        .padding(.vertical, 5)
         .onHover { hovering = $0 }
         .contextMenu {
             Button("Copy Link") {
