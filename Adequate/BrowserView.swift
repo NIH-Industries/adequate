@@ -57,7 +57,7 @@ struct Sidebar: View {
             }
             .padding(.horizontal, 12)
             .padding(.top, 8)
-
+            .padding(.bottom, 14)
 
             List(selection: $state.selectedTabID) {
                 ForEach(state.tabs) { tab in
@@ -323,7 +323,8 @@ struct TabPage: View {
 
     var body: some View {
         WebViewHost(webView: tab.webView)
-            .ignoresSafeArea()
+            // Up under the title bar, but not under the sidebar.
+            .ignoresSafeArea(edges: .top)
             .overlay(alignment: .top) {
                 if tab.isLoading {
                     ProgressView(value: max(tab.progress, 0.05))
