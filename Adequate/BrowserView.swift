@@ -28,6 +28,10 @@ struct BrowserView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: spaces.toast)
+        .overlay(alignment: .top) {
+            // With the sidebar hidden, the site sits at the top of the window instead.
+            if !spaces.sidebarShown { SiteBadge(state: spaces.current) }
+        }
         .overlay { TabSwitcher(state: spaces.current) }
         .sheet(item: $spaces.prompt) { prompt in
             SpacePromptSheet(spaces: spaces, prompt: prompt)
@@ -45,7 +49,11 @@ struct Sidebar: View {
         VStack(spacing: 0) {
             HStack {
                 Text(state.space.symbol)
-                Text(state.space.name).font(.headline).lineLimit(1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(state.space.name).font(.headline).lineLimit(1)
+                    // Where you are, somewhere a page can't draw over.
+                    if let tab = state.selectedTab { SiteLabel(tab: tab) }
+                }
                 Spacer()
                 Menu {
                     SpaceMenuItems(spaces: spaces, id: state.space.id)
@@ -63,7 +71,11 @@ struct Sidebar: View {
             List(selection: $state.selectedTabID) {
                 ForEach(state.tabs) { tab in
                     TabRow(tab: tab, close: { state.close(tab.id) },
-                           popOut: { spaces.openInNewWindow(tab.id, from: state) })
+                           popOut: { spaces.openInNewWindow(tab.id, from: state) },
+                           resetPermissions: { site in
+                               state.resetPermissions(for: site)
+                               spaces.show(toast: "\(site) can ask again")
+                           })
                         .tag(tab.id)
                 }
             }
@@ -153,6 +165,7 @@ struct TabRow: View {
     @ObservedObject var tab: Tab
     let close: () -> Void
     let popOut: () -> Void
+    let resetPermissions: (String) -> Void
     @State private var hovering = false
 
     var body: some View {
@@ -191,6 +204,11 @@ struct TabRow: View {
             .disabled(tab.address.isEmpty)
             Button(tab.isMuted ? "Unmute Tab" : "Mute Tab", action: tab.toggleMute)
             Button("Pause Media", action: tab.pauseMedia).disabled(!tab.isPlayingAudio)
+            if let site = tab.site {
+                // Undo a mistaken "Don't Allow" (or a "yes"): camera, microphone,
+                // notifications and opening apps, for this site in this Space.
+                Button("Reset Permissions for \(site)") { resetPermissions(site) }
+            }
             Divider()
             Button("Open in New Window", action: popOut)
             Button("Close Tab", action: close)
@@ -292,6 +310,61 @@ struct SpacePromptSheet: View {
             Button(action) { spaces.prompt = nil; commit() }
                 .keyboardShortcut(.defaultAction)
                 .disabled(trimmed.isEmpty || taken)
+        }
+    }
+}
+
+// MARK: Site
+
+/// The site the tab is showing, with a padlock when every part of it came
+/// over HTTPS, and a warning when it didn't. Shown where the page can't
+/// reach, since the address bar is usually hidden.
+struct SiteLabel: View {
+    @ObservedObject var tab: Tab
+
+    var body: some View {
+        if let url = URL(string: tab.address), let scheme = url.scheme {
+            let (symbol, style): (String, Color) = switch scheme {
+            case "https" where tab.isSecure: ("lock.fill", .secondary)
+            case "file": ("doc", .secondary)
+            case "about": ("", .secondary)
+            default: ("exclamationmark.triangle.fill", .orange)
+            }
+            if !symbol.isEmpty {
+                HStack(spacing: 3) {
+                    Image(systemName: symbol).foregroundStyle(style)
+                    Text(Self.site(url)).foregroundStyle(.secondary)
+                }
+                .font(.caption)
+                .lineLimit(1)
+                .truncationMode(.head)
+                .help(scheme == "https" && !tab.isSecure ? "Parts of this page didn't come over HTTPS"
+                      : scheme == "http" ? "Not secure: this page didn't come over HTTPS" : tab.address)
+            }
+        }
+    }
+
+    static func site(_ url: URL) -> String {
+        if url.isFileURL { return url.lastPathComponent }
+        let host = url.host(percentEncoded: true) ?? url.absoluteString
+        let bare = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        return url.port.map { "\(bare):\($0)" } ?? bare
+    }
+}
+
+/// The site label as a small pill at the top of the window, for when the
+/// sidebar is hidden.
+struct SiteBadge: View {
+    @ObservedObject var state: SpaceState
+
+    var body: some View {
+        if let tab = state.selectedTab, !tab.address.isEmpty {
+            SiteLabel(tab: tab)
+                .padding(.horizontal, 8).padding(.vertical, 3)
+                .background(.regularMaterial, in: Capsule())
+                .padding(.top, 6)
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
         }
     }
 }

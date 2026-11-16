@@ -225,6 +225,25 @@ final class SpaceState: ObservableObject {
         controller.addUserScript(PageNotifications.script(decisions: space.notifications ?? [:]))
     }
 
+    /// Forgets everything a site has been allowed or refused in this Space,
+    /// notifications included, and reloads its tabs so it can ask afresh.
+    func resetPermissions(for site: String) {
+        permissions.forget(site: site)
+        if space.notifications?[site] != nil {
+            space.notifications?[site] = nil
+            persist?()
+            var seen: Set<ObjectIdentifier> = []
+            for tab in tabs {
+                let controller = tab.webView.configuration.userContentController
+                if seen.insert(ObjectIdentifier(controller)).inserted { installScripts(in: controller) }
+            }
+        }
+        for tab in tabs where tab.site == site {
+            tab.forgetRefusals()
+            tab.webView.reload()
+        }
+    }
+
     /// Remembers a site's answer, tells its open pages, and gives later pages the new script.
     func setNotifications(_ allowed: Bool, for site: String) {
         space.notifications = (space.notifications ?? [:]).merging([site: allowed]) { $1 }
@@ -644,9 +663,15 @@ enum CLIToken {
     }()
 }
 
-/// Which sites may use the camera and microphone. Only "Allow" is remembered,
-/// so a site you refused can ask again.
+/// What sites may do in this Space until Adequate quits: use the camera or
+/// microphone, or open another app. Keys are "<site> <what>". A refusal lives
+/// on the tab until its page reloads (Tab.refused), so a mistaken "no" is one
+/// reload away from being asked again.
 @MainActor
 final class SitePermissions {
     var allowed: Set<String> = []
+
+    func forget(site: String) {
+        allowed = allowed.filter { !$0.hasPrefix("\(site) ") }
+    }
 }

@@ -11,6 +11,8 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     @Published var canGoBack = false
     @Published var canGoForward = false
     @Published var isLoading = false
+    /// Everything on the page came over HTTPS.
+    @Published var isSecure = false
     @Published var progress = 0.0
     @Published var favicon: NSImage?
     /// How the page looked when last on screen, for the ⌃Tab switcher.
@@ -37,6 +39,11 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     private var typedLoad = false
     private var observations: [NSKeyValueObservation] = []
     private var faviconHost: String?
+    /// What this page was refused (camera, opening an app), so it can't keep
+    /// asking. Cleared when the page reloads or you go elsewhere.
+    private var refused: Set<String> = []
+    /// A question about opening another app is showing: further asks wait.
+    private var askingToOpen = false
     /// Frames that have told MediaWatch about their media, by the id each
     /// page's script picks, and which of them are playing sound.
     private var mediaFrames: [String: WKFrameInfo] = [:]
@@ -71,6 +78,9 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
             },
             webView.observe(\.estimatedProgress, options: [.initial, .new]) { [weak self] webView, _ in
                 MainActor.assumeIsolated { self?.progress = webView.estimatedProgress }
+            },
+            webView.observe(\.hasOnlySecureContent, options: [.initial, .new]) { [weak self] webView, _ in
+                MainActor.assumeIsolated { self?.isSecure = webView.hasOnlySecureContent }
             },
         ]
     }
@@ -114,10 +124,22 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     func load(url: URL) {
         isBlank = false
         if url.isFileURL {
-            webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+            webView.loadFileURL(url, allowingReadAccessTo: Self.readAccess(for: url))
         } else {
             webView.load(URLRequest(url: url))
         }
+    }
+
+    /// What a local page may read: its own folder, so a report's images and
+    /// styles load, but only itself when it sits loose in a catch-all folder
+    /// like Downloads, or a downloaded page could read every file beside it.
+    static func readAccess(for file: URL) -> URL {
+        let folder = file.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let catchAll = [home] + ["Downloads", "Desktop", "Documents", "Library"].map { home.appendingPathComponent($0) }
+            + ["/", "/Users", "/tmp", "/private/tmp", "/private/var/tmp", NSTemporaryDirectory()].map(URL.init(fileURLWithPath:))
+        let isCatchAll = catchAll.contains { $0.resolvingSymlinksInPath().standardizedFileURL.path == folder.path }
+        return isCatchAll ? file : folder
     }
 
     /// Opens WebKit's Web Inspector for this tab, through WKWebView's private
@@ -204,8 +226,11 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
         }
         let key = "\(site) \(type.rawValue)"
         if permissions?.allowed.contains(key) == true { return decisionHandler(.grant) }
-        ask("Allow \(site) to use your \(what)?", buttons: ["Allow", "Don't Allow"]) { [weak self] choice in
-            if choice == 0 { self?.permissions?.allowed.insert(key) }
+        if refused.contains(key) { return decisionHandler(.deny) }
+        ask("Allow \(site) to use your \(what)?",
+            detail: Self.rememberNote,
+            buttons: ["Allow", "Don't Allow"], defaultButton: 1) { [weak self] choice in
+            self?.remember(key, allowed: choice == 0)
             decisionHandler(choice == 0 ? .grant : .deny)
         }
     }
@@ -214,7 +239,7 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     func askToNotify(site: String, then: @escaping (Bool) -> Void) {
         ask("Allow \(site) to show notifications?",
             detail: "They appear while Adequate is open, and clicking one brings back this tab.",
-            buttons: ["Allow", "Don't Allow"]) { then($0 == 0) }
+            buttons: ["Allow", "Don't Allow"], defaultButton: 1) { then($0 == 0) }
     }
 
     /// A page wants to share the screen (getDisplayMedia). WebKit's private
@@ -226,7 +251,7 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
                  decisionHandler: @escaping (Int) -> Void) {
         ask("Share your screen with \(Self.site(origin))?",
             detail: "To share one tab, right-click it in the sidebar and choose Open in New Window, then pick that window.",
-            buttons: ["Window…", "Entire Screen…", "Cancel"]) { choice in
+            buttons: ["Window…", "Entire Screen…", "Cancel"], defaultButton: 2) { choice in
             decisionHandler([2, 1, 0][min(choice, 2)])
         }
     }
@@ -236,12 +261,32 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     }
 
     /// An alert on the tab's window; `then` gets the index of the button pressed.
-    private func ask(_ message: String, detail: String? = nil, buttons: [String],
+    private static let rememberNote =
+        "A yes holds for this site in this Space until Adequate quits; a no until the page reloads. Right-click the tab to reset."
+
+    private func remember(_ key: String, allowed yes: Bool) {
+        if yes { permissions?.allowed.insert(key) } else { refused.insert(key) }
+    }
+
+    func forgetRefusals() { refused = [] }
+
+    /// The site this tab is on, as permissions are keyed ("host" or "host:port").
+    var site: String? {
+        guard let url = URL(string: address), let host = url.host(percentEncoded: true) else { return nil }
+        return url.port.map { "\(host):\($0)" } ?? host
+    }
+
+    /// `defaultButton` is the one Return presses: the safe answer, so a page
+    /// can't ask just as you're typing and have Return say yes.
+    private func ask(_ message: String, detail: String? = nil, buttons: [String], defaultButton: Int = 0,
                      then: @escaping (Int) -> Void) {
         let alert = NSAlert()
         alert.messageText = message
         if let detail { alert.informativeText = detail }
         buttons.forEach { alert.addButton(withTitle: $0) }
+        for (index, button) in alert.buttons.enumerated() {
+            button.keyEquivalent = index == defaultButton ? "\r" : index == buttons.count - 1 ? "\u{1b}" : ""
+        }
         let index = { (response: NSApplication.ModalResponse) in
             response.rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
         }
@@ -249,6 +294,33 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
             alert.beginSheetModal(for: window) { then(index($0)) }
         } else {
             then(index(alert.runModal()))
+        }
+    }
+
+    /// A page wants to hand a link to another app (Zoom, Slack, Mail). Ask
+    /// first, once per site and app per Space, as Safari does: otherwise any
+    /// page could launch any app with a URL handler, unprompted.
+    private func openInOtherApp(_ url: URL, scheme: String) {
+        // adequate:// is for the CLI, never pages.
+        guard scheme.lowercased() != "adequate",
+              let app = NSWorkspace.shared.urlForApplication(toOpen: url) else { return }
+        let site = self.site ?? "This page"
+        let name = FileManager.default.displayName(atPath: app.path)
+            .replacingOccurrences(of: ".app", with: "")
+        let key = "\(site) open \(scheme.lowercased())"
+        if permissions?.allowed.contains(key) == true {
+            NSWorkspace.shared.open(url)
+            return
+        }
+        if refused.contains(key) { return }
+        guard !askingToOpen else { return }
+        askingToOpen = true
+        ask("Allow \(site) to open \(name)?",
+            detail: Self.rememberNote,
+            buttons: ["Open \(name)", "Cancel"], defaultButton: 1) { [weak self] choice in
+            self?.askingToOpen = false
+            self?.remember(key, allowed: choice == 0)
+            if choice == 0 { NSWorkspace.shared.open(url) }
         }
     }
 
@@ -264,7 +336,7 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
         guard let url = navigationAction.request.url else { return decisionHandler(.allow) }
         // mailto:, zoommtg:, slack: and friends belong to other apps.
         if let scheme = url.scheme, !["http", "https", "file", "about", "data", "blob", "javascript"].contains(scheme) {
-            NSWorkspace.shared.open(url)
+            openInOtherApp(url, scheme: scheme)
             return decisionHandler(.cancel)
         }
         if navigationAction.navigationType == .linkActivated,
@@ -276,6 +348,8 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        // A fresh page (or a reload) may ask again about anything refused.
+        forgetRefusals()
         // A new page: the old one's frames and sound are gone. Muting stays with the tab.
         mediaFrames = [:]
         audibleFrames = []

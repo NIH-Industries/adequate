@@ -26,6 +26,19 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
 - **Suggestions**: the address bar suggests sites (protocol and domain) from
   the Space's own history as you type (↑/↓ to choose). Each Space keeps its history to
   itself, in `history/<space id>.json`, and deleting the Space deletes it.
+- **Where you are**: the address bar is usually hidden, so the site's name
+  sits under the Space name in the sidebar (or in a pill at the top of the
+  window when the sidebar is hidden), with a padlock when the whole page came
+  over HTTPS and a warning when it didn't. Pages can't draw over either.
+- **Asking first**: a page has to ask before it opens another app (Zoom,
+  Slack, Mail). A yes, like a camera or microphone yes, holds for that site in
+  that Space until Adequate quits; a no holds until the page reloads, so it
+  can't keep asking. Return always picks the safe answer. Said the wrong
+  thing? Right-click the tab › Reset Permissions for the site, which also
+  forgets its notification answer.
+- **Local files**: an html file can read the files in its own folder (so a
+  report's images load), unless that folder is a catch-all one like
+  Downloads, Desktop or your home folder: then it can only read itself.
 - **Fresh start**: tabs aren't kept between launches; Spaces and logins are.
 
 ## Keys
