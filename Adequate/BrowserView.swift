@@ -58,12 +58,6 @@ struct Sidebar: View {
             .padding(.horizontal, 12)
             .padding(.top, 8)
 
-            Button { state.newTab() } label: {
-                Label("New Tab", systemImage: "plus").frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.borderless)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
 
             List(selection: $state.selectedTabID) {
                 ForEach(state.tabs) { tab in
