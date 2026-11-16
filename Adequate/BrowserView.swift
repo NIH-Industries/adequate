@@ -122,13 +122,17 @@ struct SpaceSwitcher: View {
                         .contextMenu { SpaceMenuItems(spaces: spaces, id: state.space.id) }
                     }
                 }
-                .padding(.vertical, 2)
+                // Room for the selected Space's ring (3pt out) and the sound
+                // badge, which the scroll view would otherwise clip.
+                .padding(.vertical, 6)
+                .padding(.horizontal, 4)
             }
             Button { spaces.prompt = .new } label: { Image(systemName: "plus") }
                 .buttonStyle(.borderless)
                 .help("New Space (⇧⌘N)")
         }
-        .padding(10)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 6)
     }
 }
 
@@ -141,7 +145,7 @@ struct SpaceDot: View {
     var body: some View {
         Button(action: action) {
             Text(state.space.symbol)
-                .font(.system(size: 14))
+                .font(.system(size: 12))
                 .frame(width: 26, height: 26)
                 .background(Circle().fill(state.space.tint.opacity(selected ? 0.9 : 0.3)))
                 .overlay(Circle().strokeBorder(Color.primary.opacity(selected ? 0.6 : 0), lineWidth: 1.5)
