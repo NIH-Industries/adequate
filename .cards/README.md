@@ -14,6 +14,7 @@ _none_
 
 _none_
 
-## Blocked (1)
+## Blocked (2)
 
 - [Support passkeys](support-passkeys.toml) — priority: low · tags: `idea`, `auth`
+- [Protect cookies with the App Sandbox](protect-cookies-with-the-app-sandbox.toml) — priority: medium · tags: `idea`, `security`
