@@ -2,3 +2,5 @@ tmp/
 *.xcodeproj/
 Adequate/Info.plist
 .DS_Store
+.cards/.logs/
+.cards/.claims/

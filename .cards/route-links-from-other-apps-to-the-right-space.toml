@@ -1,0 +1,25 @@
+name = "Route links from other apps to the right Space"
+status = "todo"
+description = """
+Links from other apps (Slack, Mail, terminal) always open in the current Space, so a Fresho GitHub link can land logged-out in home. Still deciding whether to do this.
+
+## Ways to route (can stack)
+1. **Learned from history** (start here): send a link to the Space whose history visits that site most. Sites used in several Spaces (Gmail) stay in the current Space. No setup.
+2. **Rules**: site or URL pattern → Space, e.g. github.com/Fresho-Org/* → Fresho, *.world-txt.com → home. Kept per Space in Edit Space ("Links that open here"). Rules beat history.
+3. **By sending app**: the get-URL Apple Event says which app sent it, so "everything from Slack → Fresho" is possible.
+
+## Extras
+- A toast like "Opened in 🥦 Fresho" when a link goes to a Space other than the current one.
+- Hold ⌥ while clicking to skip routing and open in the current Space.
+
+## Notes
+- Crest had this (device_link_route / device_link_site tables) but no rules were ever set up there, so nothing to import.
+- Links arrive in AppDelegate.handleGetURL → SpaceStore.openExternal; routing would go there.
+- Per-Space history is History.swift (protocol + domain keys)."""
+created_at = "2026-11-16T11:15:15.866819Z"
+updated_at = "2026-11-16T11:15:15.866819Z"
+tags = [
+    "idea",
+    "links",
+]
+priority = "low"
