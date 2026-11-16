@@ -99,13 +99,22 @@ final class SpaceState: ObservableObject {
     let dataStore: WKWebsiteDataStore
     @Published private(set) var tabs: [Tab] = []
     @Published var selectedTabID: Tab.ID? {
-        didSet { if cycleIndex == nil, let id = selectedTabID { touch(id) } }
+        willSet {
+            // Picture the tab we're leaving while it's still on screen.
+            if newValue != selectedTabID { selectedTab?.captureSnapshot() }
+        }
+        didSet { if let id = selectedTabID { touch(id) } }
     }
 
     /// Tab ids, most recently used first. Ctrl-Tab walks this order.
     private var mru: [Tab.ID] = []
-    private var cycleOrder: [Tab.ID] = []
-    private var cycleIndex: Int?
+    /// While Control is held after ⌃Tab: the tabs in the switcher, most
+    /// recent first (frozen as the cycle began), and which one is picked.
+    @Published private(set) var cycleOrder: [Tab.ID] = []
+    @Published private(set) var cycleIndex: Int?
+    var isCycling: Bool { cycleIndex != nil }
+    var cycleTabs: [Tab] { cycleOrder.compactMap { id in tabs.first { $0.id == id } } }
+    var cycleTarget: Tab.ID? { cycleIndex.flatMap { cycleOrder.indices.contains($0) ? cycleOrder[$0] : nil } }
     /// Camera and microphone allowed for sites in this Space, until Adequate quits.
     let permissions = SitePermissions()
     /// Pages visited in this Space, for address bar suggestions.
@@ -248,24 +257,37 @@ final class SpaceState: ObservableObject {
         return true
     }
 
-    /// One step of Ctrl-Tab while Control is held. The MRU order is frozen
-    /// until `endCycle`, so repeated presses walk further back.
+    /// One step of ⌃Tab while Control is held. This only moves the switcher's
+    /// pick; the tab changes when Control is let go (`endCycle`). The MRU
+    /// order is frozen until then, so repeated presses walk further back.
     func cycle(backward: Bool) {
         if cycleIndex == nil {
+            guard mru.count > 1 else { return }
+            selectedTab?.captureSnapshot()
             cycleOrder = mru
             cycleIndex = 0
         }
-        guard cycleOrder.count > 1, let index = cycleIndex else { return }
-        let next = (index + (backward ? -1 : 1) + cycleOrder.count) % cycleOrder.count
-        cycleIndex = next
-        selectedTabID = cycleOrder[next]
+        guard let index = cycleIndex else { return }
+        cycleIndex = (index + (backward ? -1 : 1) + cycleOrder.count) % cycleOrder.count
     }
 
-    /// Control released: the tab we landed on becomes the most recent.
+    /// Picks a tab in the switcher directly, e.g. by clicking it.
+    func cycle(to id: Tab.ID) {
+        if let index = cycleOrder.firstIndex(of: id) { cycleIndex = index }
+    }
+
+    /// Control let go: go to the picked tab, which becomes the most recent.
     func endCycle() {
         guard cycleIndex != nil else { return }
+        let target = cycleTarget
+        cancelCycle()
+        if let target, tabs.contains(where: { $0.id == target }) { selectedTabID = target }
+    }
+
+    /// Esc, or leaving the Space mid-cycle: close the switcher, stay put.
+    func cancelCycle() {
         cycleIndex = nil
-        if let id = selectedTabID { touch(id) }
+        cycleOrder = []
     }
 
     private func touch(_ id: Tab.ID) {
@@ -295,6 +317,7 @@ final class SpaceStore: ObservableObject {
     weak var mainWindow: NSWindow?
     private var tabWindows: [TabWindow] = []
     private var keyMonitor: Any?
+    private var resignObserver: Any?
 
     init() {
         var loaded = Self.load()
@@ -359,7 +382,7 @@ final class SpaceStore: ObservableObject {
               !name.trimmingCharacters(in: .whitespaces).isEmpty
         else { return }
         let state = space(named: name)
-        current.endCycle()
+        current.cancelCycle()
         selected = state.space.id
         for case let text? in items.filter({ $0.name == "url" }).map(\.value) {
             state.newTab().load(text)
@@ -402,7 +425,7 @@ final class SpaceStore: ObservableObject {
 
     func select(_ id: Space.ID) {
         guard id != selected else { return }
-        current.endCycle()
+        current.cancelCycle()
         selected = id
     }
 
@@ -506,6 +529,12 @@ final class SpaceStore: ObservableObject {
             guard let self else { return event }
             return MainActor.assumeIsolated { self.handle(event) }
         }
+        // Control's release never arrives once another app has the keyboard.
+        resignObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.states.forEach { $0.cancelCycle() } }
+        }
     }
 
     private func handle(_ event: NSEvent) -> NSEvent? {
@@ -514,6 +543,11 @@ final class SpaceStore: ObservableObject {
         if event.type == .flagsChanged {
             if !flags.contains(.control) { current.endCycle() }
             return event
+        }
+        // The ⌃Tab switcher is up: Esc backs out, other keys are swallowed.
+        if current.isCycling, event.keyCode != 48 {
+            if event.keyCode == 53 { current.cancelCycle() }
+            return nil
         }
         // Leave dialogs (naming a Space, alerts) their own keys.
         if prompt != nil || event.window?.attachedSheet != nil || event.window?.sheetParent != nil {

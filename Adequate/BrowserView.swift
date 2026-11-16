@@ -28,6 +28,7 @@ struct BrowserView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: spaces.toast)
+        .overlay { TabSwitcher(state: spaces.current) }
         .sheet(item: $spaces.prompt) { prompt in
             SpacePromptSheet(spaces: spaces, prompt: prompt)
         }
@@ -290,6 +291,87 @@ struct SpacePromptSheet: View {
                 .keyboardShortcut(.defaultAction)
                 .disabled(trimmed.isEmpty || taken)
         }
+    }
+}
+
+// MARK: Tab switcher
+
+/// ⌃Tab: the Space's tabs, most recent first, while Control is held. ⌃Tab and
+/// ⌃⇧Tab move the pick, letting go of Control goes there, Esc backs out.
+struct TabSwitcher: View {
+    @ObservedObject var state: SpaceState
+
+    var body: some View {
+        if state.isCycling {
+            ScrollViewReader { scroller in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(state.cycleTabs) { tab in
+                            TabCard(tab: tab, picked: tab.id == state.cycleTarget, tint: state.space.tint)
+                                .id(tab.id)
+                                .onTapGesture {
+                                    state.cycle(to: tab.id)
+                                    state.endCycle()
+                                }
+                        }
+                    }
+                    .padding(14)
+                }
+                .onAppear { scroller.scrollTo(state.cycleTarget, anchor: .center) }
+                .onChange(of: state.cycleTarget) { _, target in
+                    withAnimation(.easeOut(duration: 0.15)) { scroller.scrollTo(target, anchor: .center) }
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.separator))
+            .shadow(radius: 20, y: 6)
+            .frame(maxWidth: TabCard.width * 5 + 10 * 4 + 28)
+            .padding(40)
+        }
+    }
+}
+
+/// One tab in the switcher: how it looked last time it showed, or its icon
+/// if it hasn't been on screen yet, with its title underneath.
+struct TabCard: View {
+    @ObservedObject var tab: Tab
+    let picked: Bool
+    let tint: Color
+    static let width: CGFloat = 180
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ZStack {
+                Rectangle().fill(.background.secondary)
+                if let snapshot = tab.snapshot {
+                    Image(nsImage: snapshot)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: Self.width, height: Self.width * 0.625, alignment: .top)
+                } else if let favicon = tab.favicon {
+                    Image(nsImage: favicon).resizable().interpolation(.high)
+                        .frame(width: 32, height: 32)
+                } else {
+                    Image(systemName: "globe").font(.system(size: 28)).foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: Self.width, height: Self.width * 0.625, alignment: .top)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
+
+            HStack(spacing: 5) {
+                if let favicon = tab.favicon, tab.snapshot != nil {
+                    Image(nsImage: favicon).resizable().interpolation(.high).frame(width: 14, height: 14)
+                }
+                Text(tab.displayTitle).font(.caption).lineLimit(1).truncationMode(.tail)
+            }
+            .frame(width: Self.width, alignment: .leading)
+        }
+        .padding(6)
+        .background(picked ? tint.opacity(0.25) : .clear, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(picked ? tint : .clear, lineWidth: 2))
+        .contentShape(Rectangle())
     }
 }
 

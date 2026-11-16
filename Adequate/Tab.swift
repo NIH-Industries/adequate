@@ -13,6 +13,8 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     @Published var isLoading = false
     @Published var progress = 0.0
     @Published var favicon: NSImage?
+    /// How the page looked when last on screen, for the ⌃Tab switcher.
+    @Published private(set) var snapshot: NSImage?
     /// Some frame of the page is playing sound (or would be, if muted).
     @Published private(set) var isPlayingAudio = false
     @Published private(set) var isMuted = false
@@ -124,6 +126,19 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
         guard let inspector = webView.value(forKey: "_inspector") as? NSObject else { return }
         let show = Selector(("show"))
         if inspector.responds(to: show) { inspector.perform(show) }
+    }
+
+    /// Pictures the page for the ⌃Tab switcher. Only a web view in a window
+    /// draws, so this is taken while the tab is showing, e.g. as you leave it.
+    func captureSnapshot() {
+        guard webView.window != nil, !webView.bounds.isEmpty, !isBlank else { return }
+        let config = WKSnapshotConfiguration()
+        config.snapshotWidth = 480
+        webView.takeSnapshot(with: config) { [weak self] image, _ in
+            MainActor.assumeIsolated {
+                if let image { self?.snapshot = image }
+            }
+        }
     }
 
     func reload() {
@@ -271,6 +286,11 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
         if let url = webView.url { history?.record(url, title: webView.title ?? "", typed: typedLoad) }
         typedLoad = false
         Task { await refreshFavicon() }
+        // A moment after loading, once the page has drawn, if it's on screen.
+        Task {
+            try? await Task.sleep(for: .seconds(1))
+            captureSnapshot()
+        }
     }
 
     private func refreshFavicon() async {

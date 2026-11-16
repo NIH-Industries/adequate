@@ -39,7 +39,7 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
 | ⌘[ / ⌘] | back / forward |
 | ⌘R | reload |
 | ⌥⌘I | developer tools (or right-click › Inspect Element) |
-| ⌃Tab / ⌃⇧Tab | recent tabs in this Space, most recent first |
+| ⌃Tab / ⌃⇧Tab | switcher of this Space's tabs, most recent first, with previews: let go of ⌃ to go there, Esc to stay |
 | ⌘⇧[ / ⌘⇧] | previous / next tab in the sidebar |
 | ⌘1–⌘8, ⌘9 | tab by position, last tab |
 | ⌃1–⌃9 | Space by position |
