@@ -29,6 +29,10 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     var onClose: (() -> Void)?
     /// The Space's memory of which sites may use the camera and microphone.
     var permissions: SitePermissions?
+    /// The Space's history, which pages loaded here add to.
+    var history: History?
+    /// The page loading now was asked for in the address bar.
+    private var typedLoad = false
     private var observations: [NSKeyValueObservation] = []
     private var faviconHost: String?
     /// Frames that have told MediaWatch about their media, by the id each
@@ -49,7 +53,10 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
                 MainActor.assumeIsolated { self?.address = webView.url?.absoluteString ?? "" }
             },
             webView.observe(\.title, options: [.initial, .new]) { [weak self] webView, _ in
-                MainActor.assumeIsolated { self?.title = webView.title ?? "" }
+                MainActor.assumeIsolated {
+                    self?.title = webView.title ?? ""
+                    if let url = webView.url { self?.history?.retitle(url, webView.title ?? "") }
+                }
             },
             webView.observe(\.canGoBack, options: [.initial, .new]) { [weak self] webView, _ in
                 MainActor.assumeIsolated { self?.canGoBack = webView.canGoBack }
@@ -76,6 +83,7 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     func load(_ input: String) {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        typedLoad = true
         let url = Self.url(for: text)
         // Only the part after # changed: a plain load would just jump within
         // the page, and pages that read the # once (magic links) never see it.
@@ -187,6 +195,13 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
         }
     }
 
+    /// A page asked to show notifications.
+    func askToNotify(site: String, then: @escaping (Bool) -> Void) {
+        ask("Allow \(site) to show notifications?",
+            detail: "They appear while Adequate is open, and clicking one brings back this tab.",
+            buttons: ["Allow", "Don't Allow"]) { then($0 == 0) }
+    }
+
     /// A page wants to share the screen (getDisplayMedia). WebKit's private
     /// delegate method: answer with what macOS's picker should offer
     /// (0 deny, 1 a screen, 2 a window).
@@ -253,6 +268,8 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if let url = webView.url { history?.record(url, title: webView.title ?? "", typed: typedLoad) }
+        typedLoad = false
         Task { await refreshFavicon() }
     }
 

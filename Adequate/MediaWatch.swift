@@ -14,15 +14,12 @@ final class MediaWatch: NSObject, WKScriptMessageHandler {
     private static let name = "adequateMedia"
     weak var state: SpaceState?
 
-    /// Wires the script and its replies into a new tab's configuration.
+    /// Wires the script's replies into a new tab's configuration.
     /// Pop-ups share their opener's controller, so they're already wired.
     static func install(in config: WKWebViewConfiguration, for state: SpaceState) {
         let watch = MediaWatch()
         watch.state = state
-        let controller = config.userContentController
-        controller.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart,
-                                              forMainFrameOnly: false, in: world))
-        controller.add(watch, contentWorld: world, name: name)
+        config.userContentController.add(watch, contentWorld: world, name: name)
     }
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -37,6 +34,11 @@ final class MediaWatch: NSObject, WKScriptMessageHandler {
     /// unmutes its media and keeps it so as new media starts.
     static func setMuted(_ muted: Bool, in webView: WKWebView, frame: WKFrameInfo) {
         webView.evaluateJavaScript("globalThis.__adequateSetMuted?.(\(muted))", in: frame, in: world) { _ in }
+    }
+
+    /// The page script, which SpaceState adds to each tab with the others.
+    static var userScript: WKUserScript {
+        WKUserScript(source: script, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: world)
     }
 
     private static let script = """

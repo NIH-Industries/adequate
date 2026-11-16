@@ -20,6 +20,12 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
   them (asked once per site per Space, until Adequate quits), and share a
   window or the whole screen. To share one tab, right-click it and choose
   Open in New Window, then pick that window.
+- **Notifications**: sites can show macOS notifications once you allow them
+  (remembered per site per Space). Clicking one brings back its tab. They
+  only come while Adequate is open with the tab loaded: there's no push.
+- **Suggestions**: the address bar suggests sites (protocol and domain) from
+  the Space's own history as you type (↑/↓ to choose). Each Space keeps its history to
+  itself, in `history/<space id>.json`, and deleting the Space deletes it.
 - **Fresh start**: tabs aren't kept between launches; Spaces and logins are.
 
 ## Keys

@@ -324,7 +324,8 @@ struct TabPage: View {
     @ObservedObject var tab: Tab
     @State private var draft = ""
     @State private var editing = false
-    @FocusState private var addressFocused: Bool
+    @State private var suggestions: [History.Suggestion] = []
+    @State private var chosen: Int?
 
     var body: some View {
         WebViewHost(webView: tab.webView)
@@ -347,39 +348,40 @@ struct TabPage: View {
                 if tab.isBlank { edit() } else { tab.focusPage() }
             }
             .onChange(of: tab.address) { _, address in
-                if !addressFocused || draft.isEmpty { draft = address }
+                if !editing { draft = address }
             }
             .onChange(of: tab.focusRequest) { _, _ in edit() }
-            .onChange(of: addressFocused) { _, focused in
-                if !focused { finish() }
-            }
     }
 
     private var addressBar: some View {
-        HStack(spacing: 6) {
-            Button(action: tab.goBack) { Image(systemName: "chevron.left") }
-                .disabled(!tab.canGoBack).help("Back (⌘[)")
-            Button(action: tab.goForward) { Image(systemName: "chevron.right") }
-                .disabled(!tab.canGoForward).help("Forward (⌘])")
-            Button(action: tab.reload) { Image(systemName: tab.isLoading ? "xmark" : "arrow.clockwise") }
-                .help(tab.isLoading ? "Stop" : "Reload (⌘R)")
-            // Taking focus selects the whole address, ready to type over.
-            TextField("Search or enter address", text: $draft)
-                .textFieldStyle(.plain)
-                .font(.system(size: 14))
-                .focused($addressFocused)
-                .onSubmit {
-                    tab.load(draft)
-                    finish()
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Button(action: tab.goBack) { Image(systemName: "chevron.left") }
+                    .disabled(!tab.canGoBack).help("Back (⌘[)")
+                Button(action: tab.goForward) { Image(systemName: "chevron.right") }
+                    .disabled(!tab.canGoForward).help("Forward (⌘])")
+                Button(action: tab.reload) { Image(systemName: tab.isLoading ? "xmark" : "arrow.clockwise") }
+                    .help(tab.isLoading ? "Stop" : "Reload (⌘R)")
+                AddressField(text: $draft, onEdit: suggest, onMove: move, onSubmit: go,
+                             onCancel: { finish(); tab.focusPage() }, onEndEditing: finish)
+                    .frame(height: 20)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            if !suggestions.isEmpty {
+                Divider()
+                VStack(spacing: 0) {
+                    ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, suggestion in
+                        SuggestionRow(entry: suggestion.entry, chosen: index == chosen)
+                            .contentShape(Rectangle())
+                            .onTapGesture { open(suggestion.entry.url) }
+                            .onHover { if $0 { chosen = index } }
+                    }
                 }
-                .onExitCommand {
-                    finish()
-                    tab.focusPage()
-                }
+                .padding(6)
+            }
         }
         .buttonStyle(.borderless)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
         .frame(maxWidth: 720)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator))
@@ -388,17 +390,129 @@ struct TabPage: View {
         .padding(.top, 10)
     }
 
+    /// Typing: suggestions from this Space's history. One whose address starts
+    /// with what you typed is picked, so Return goes there.
+    private func suggest(_ text: String) {
+        suggestions = tab.history?.suggestions(for: text) ?? []
+        chosen = suggestions.first?.isPrefix == true ? 0 : nil
+    }
+
+    private func move(_ step: Int) {
+        guard !suggestions.isEmpty else { return }
+        // Up past the first suggestion is back to just what you typed.
+        let next = (chosen ?? -1) + step
+        chosen = next < 0 ? nil : min(next, suggestions.count - 1)
+    }
+
+    private func go() {
+        if let chosen, suggestions.indices.contains(chosen) {
+            open(suggestions[chosen].entry.url)
+        } else {
+            tab.load(draft)
+            finish()
+        }
+    }
+
+    private func open(_ url: String) {
+        tab.load(url)
+        finish()
+    }
+
     private func edit() {
         draft = tab.address
+        suggestions = []
+        chosen = nil
         editing = true
-        // The field has to exist before it can take focus.
-        DispatchQueue.main.async { addressFocused = true }
     }
 
     private func finish() {
+        guard editing else { return }
         editing = false
-        addressFocused = false
+        suggestions = []
+        chosen = nil
         draft = tab.address
+    }
+}
+
+struct SuggestionRow: View {
+    let entry: History.Entry
+    let chosen: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(entry.title.isEmpty ? History.bare(entry.url) : entry.title)
+                .lineLimit(1)
+            Text(History.bare(entry.url))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .foregroundStyle(chosen ? Color.white.opacity(0.8) : .secondary)
+            Spacer(minLength: 0)
+        }
+        .font(.system(size: 13))
+        .foregroundStyle(chosen ? Color.white : .primary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(RoundedRectangle(cornerRadius: 6).fill(chosen ? Color.accentColor : .clear))
+    }
+}
+
+/// The address box: an AppKit text field, so the arrow keys can move through
+/// suggestions while you type. It takes focus as it appears, with the whole
+/// address selected.
+struct AddressField: NSViewRepresentable {
+    @Binding var text: String
+    var onEdit: (String) -> Void
+    var onMove: (Int) -> Void
+    var onSubmit: () -> Void
+    var onCancel: () -> Void
+    var onEndEditing: () -> Void
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField(string: text)
+        field.placeholderString = "Search or enter address"
+        field.isBordered = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.font = .systemFont(ofSize: 14)
+        field.lineBreakMode = .byTruncatingTail
+        field.cell?.isScrollable = true
+        field.cell?.wraps = false
+        field.delegate = context.coordinator
+        DispatchQueue.main.async { field.window?.makeFirstResponder(field) }
+        return field
+    }
+
+    func updateNSView(_ field: NSTextField, context: Context) {
+        context.coordinator.parent = self
+        if field.currentEditor() == nil, field.stringValue != text { field.stringValue = text }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    @MainActor
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: AddressField
+        init(parent: AddressField) { self.parent = parent }
+
+        func controlTextDidChange(_ note: Notification) {
+            guard let field = note.object as? NSTextField else { return }
+            parent.text = field.stringValue
+            parent.onEdit(field.stringValue)
+        }
+
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            switch selector {
+            case #selector(NSResponder.moveUp(_:)): parent.onMove(-1)
+            case #selector(NSResponder.moveDown(_:)): parent.onMove(1)
+            case #selector(NSResponder.insertNewline(_:)): parent.onSubmit()
+            case #selector(NSResponder.cancelOperation(_:)): parent.onCancel()
+            default: return false
+            }
+            return true
+        }
+
+        /// Clicking into the page, or anywhere that takes the keyboard.
+        func controlTextDidEndEditing(_ note: Notification) { parent.onEndEditing() }
     }
 }
 

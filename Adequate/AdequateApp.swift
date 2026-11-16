@@ -81,6 +81,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
         spaces.showWindow = { [weak self] in self?.showWindow() }
         _ = CLIToken.value  // make sure the CLI has a token to read
+        Notifier.shared.reveal = { [weak self] id in self?.spaces.reveal(id) }
+        Notifier.shared.start()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

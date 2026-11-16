@@ -14,6 +14,8 @@ struct Space: Identifiable, Codable, Hashable {
     /// SpaceStore fills them in on launch.
     var color: SpaceColor?
     var emoji: String?
+    /// Sites asked about notifications, and whether they may show them.
+    var notifications: [String: Bool]?
 
     var tint: Color { (color ?? .blue).color }
     var symbol: String { emoji ?? String(name.prefix(1)).uppercased() }
@@ -106,6 +108,8 @@ final class SpaceState: ObservableObject {
     private var cycleIndex: Int?
     /// Camera and microphone allowed for sites in this Space, until Adequate quits.
     let permissions = SitePermissions()
+    /// Pages visited in this Space, for address bar suggestions.
+    let history: History
     /// Passes each tab's sound changes up, so the Space's dot can show them.
     private var soundWatches: [Tab.ID: AnyCancellable] = [:]
 
@@ -114,6 +118,7 @@ final class SpaceState: ObservableObject {
     init(space: Space) {
         self.space = space
         dataStore = WKWebsiteDataStore(forIdentifier: space.id)
+        history = History(space: space.id)
     }
 
     var selectedTab: Tab? { tabs.first { $0.id == selectedTabID } }
@@ -141,10 +146,13 @@ final class SpaceState: ObservableObject {
                 config.setValue(true, forKey: "mediaCaptureEnabled")
             }
             MediaWatch.install(in: config, for: self)
+            PageNotifications.install(in: config, for: self)
+            installScripts(in: config.userContentController)
             return config
         }()
         let tab = Tab(configuration: config)
         tab.permissions = permissions
+        tab.history = history
         // A pop-up or target=_blank link: WebKit loads its page into this tab.
         if configuration != nil { tab.isBlank = false }
         tab.onOpenTab = { [weak self] configuration in
@@ -197,6 +205,31 @@ final class SpaceState: ObservableObject {
         soundWatches[id] = nil
         mru.removeAll { $0 == id }
         if selectedTabID == id { selectedTabID = mru.first }
+    }
+
+    /// Saves the Spaces, set by SpaceStore.
+    var persist: (() -> Void)?
+
+    private func installScripts(in controller: WKUserContentController) {
+        controller.removeAllUserScripts()
+        controller.addUserScript(MediaWatch.userScript)
+        controller.addUserScript(PageNotifications.script(decisions: space.notifications ?? [:]))
+    }
+
+    /// Remembers a site's answer, tells its open pages, and gives later pages the new script.
+    func setNotifications(_ allowed: Bool, for site: String) {
+        space.notifications = (space.notifications ?? [:]).merging([site: allowed]) { $1 }
+        persist?()
+        if allowed { Notifier.shared.requestAuthorization() }
+        var seen: Set<ObjectIdentifier> = []
+        for tab in tabs {
+            let controller = tab.webView.configuration.userContentController
+            if seen.insert(ObjectIdentifier(controller)).inserted { installScripts(in: controller) }
+            let host = site.split(separator: ":").first.map(String.init) ?? site
+            tab.webView.evaluateJavaScript(
+                "location.hostname === '\(host)' && window.__adequateNotify?.('permission', '\(allowed ? "granted" : "denied")')"
+            ) { _, _ in }
+        }
     }
 
     /// Takes a tab out of the sidebar, still loaded, to live in a window of its own.
@@ -277,6 +310,7 @@ final class SpaceStore: ObservableObject {
         }
         states = loaded.map(SpaceState.init)
         selected = loaded[0].id
+        states.forEach { $0.persist = { [weak self] in self?.save() } }
         save()
         installKeyMonitor()
     }
@@ -308,6 +342,7 @@ final class SpaceStore: ObservableObject {
         }
         let (color, emoji) = SpaceLook.fresh(avoiding: states.map(\.space), name: wanted)
         let state = SpaceState(space: Space(id: UUID(), name: wanted, color: color, emoji: emoji))
+        state.persist = { [weak self] in self?.save() }
         states.append(state)
         save()
         return state
@@ -381,6 +416,21 @@ final class SpaceStore: ObservableObject {
         state.selectedTabID = tab.id
     }
 
+    /// Brings a tab forward wherever it is, for a clicked notification.
+    func reveal(_ id: Tab.ID) -> Tab? {
+        if let popped = tabWindows.first(where: { $0.tab.id == id }) {
+            popped.window.makeKeyAndOrderFront(nil)
+            NSApp.activate()
+            return popped.tab
+        }
+        guard let state = states.first(where: { $0.tabs.contains { $0.id == id } }) else { return nil }
+        select(state.space.id)
+        state.selectedTabID = id
+        showWindow?()
+        NSApp.activate()
+        return state.selectedTab
+    }
+
     /// Pops a tab out into its own window, e.g. to share just it in a call.
     func openInNewWindow(_ id: Tab.ID, from state: SpaceState) {
         guard let tab = state.detach(id) else { return }
@@ -437,6 +487,7 @@ final class SpaceStore: ObservableObject {
             // The data store can only go once nothing holds it any more.
             try? await Task.sleep(for: .seconds(1))
             try? await WKWebsiteDataStore.remove(forIdentifier: id)
+            History.erase(space: id)
         }
     }
 
