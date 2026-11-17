@@ -56,7 +56,7 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
 | ⌘L | address bar (it floats over the page) |
 | ⌘S | show / hide the sidebar |
 | ⌘⇧C | copy the current page's address |
-| ⌘F | find on the page: Return / ⇧Return (or ⌘G / ⌘⇧G) for next / previous, Esc to close |
+| ⌘F | find on the page: Return / ⇧Return (or ⌘G / ⌘⇧G) for next / previous, Esc to close and clear the highlight |
 | ⌘[ / ⌘] | back / forward |
 | ⌘R | reload |
 | ⌥⌘I | developer tools (or right-click › Inspect Element) |

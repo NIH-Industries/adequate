@@ -137,10 +137,12 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
         findRequest += 1
     }
 
-    /// Esc or the close button. The match stays selected, like Safari.
+    /// Esc or the close button: the match is let go, so it isn't left highlighted.
     func hideFind() {
         findShown = false
         findTask?.cancel()
+        findResult = nil
+        webView.evaluateJavaScript("window.getSelection()?.removeAllRanges()") { _, _ in }
         focusPage()
     }
 
