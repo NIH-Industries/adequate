@@ -17,13 +17,14 @@ final class History {
 
     private static let folder = SpaceStore.file.deletingLastPathComponent().appendingPathComponent("history")
     private static let limit = 3000
-    private let file: URL
+    /// nil for a throwaway Space: suggestions last until Adequate quits, and nothing is written.
+    private let file: URL?
     private var entries: [String: Entry] = [:]
     private var saveTask: Task<Void, Never>?
 
-    init(space: UUID) {
-        file = Self.folder.appendingPathComponent("\(space.uuidString).json")
-        if let data = try? Data(contentsOf: file),
+    init(space: UUID, persistent: Bool = true) {
+        file = persistent ? Self.folder.appendingPathComponent("\(space.uuidString).json") : nil
+        if let file, let data = try? Data(contentsOf: file),
            let list = try? JSONDecoder().decode([Entry].self, from: data) {
             // Older files kept whole addresses: fold those into their sites.
             var merged: [String: (entry: Entry, best: Int)] = [:]
@@ -115,6 +116,7 @@ final class History {
     }
 
     private func saveSoon() {
+        guard file != nil else { return }
         saveTask?.cancel()
         saveTask = Task {
             try? await Task.sleep(for: .seconds(2))
@@ -131,7 +133,7 @@ final class History {
             list = Array(list.prefix(Self.limit))
             entries = Dictionary(list.map { ($0.url, $0) }, uniquingKeysWith: { a, _ in a })
         }
-        guard let data = try? JSONEncoder().encode(list) else { return }
+        guard let file, let data = try? JSONEncoder().encode(list) else { return }
         try? FileManager.default.createDirectory(at: Self.folder, withIntermediateDirectories: true)
         try? data.write(to: file, options: .atomic)
     }

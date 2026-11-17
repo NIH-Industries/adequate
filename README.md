@@ -7,6 +7,13 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
   Switch with the dots at the bottom of the sidebar; right-click one to
   edit (name, emoji, colour), reorder or delete it. Deleting a Space erases
   its site data.
+- **Throwaway Spaces**: tick Throwaway in the Space dialog and its logins,
+  site data and history live only in memory, forgotten when Adequate quits.
+  A kept Space's cookies are plain files any program running as you can read,
+  so keep the logins that matter most (work SSO, cloud consoles, banking) in
+  a throwaway one. Its dot has a dashed edge; right-click it › Forget
+  Everything to log out of everything now. Turning it on for an existing
+  Space erases what that Space had saved.
 - **`adequate` CLI**: `adequate open <space> <url>...` opens tabs in a Space,
   creating it if needed; `adequate spaces` lists them. Requests carry a
   per-user token, so web pages can't forge them.

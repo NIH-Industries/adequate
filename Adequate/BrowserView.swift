@@ -99,6 +99,10 @@ struct SpaceMenuItems: View {
         Button("Edit Space…") { spaces.prompt = .edit(id) }
         Button("Move Left") { spaces.move(id, by: -1) }.disabled(index == 0)
         Button("Move Right") { spaces.move(id, by: 1) }.disabled(index == spaces.states.count - 1)
+        if spaces.state(id)?.space.isThrowaway == true {
+            Divider()
+            Button("Forget Everything") { spaces.forgetEverything(in: id) }
+        }
         Divider()
         Button("Delete Space…", role: .destructive) { spaces.prompt = .delete(id) }
             .disabled(spaces.states.count < 2)
@@ -150,6 +154,13 @@ struct SpaceDot: View {
                 .background(Circle().fill(state.space.tint.opacity(selected ? 0.9 : 0.3)))
                 .overlay(Circle().strokeBorder(Color.primary.opacity(selected ? 0.6 : 0), lineWidth: 1.5)
                     .padding(-3))
+                // Throwaway Spaces wear a dashed edge: nothing here is kept.
+                .overlay {
+                    if state.space.isThrowaway {
+                        Circle().strokeBorder(Color.primary.opacity(0.7),
+                                              style: StrokeStyle(lineWidth: 1, dash: [2.5, 2]))
+                    }
+                }
                 .overlay(alignment: .topTrailing) {
                     if !state.audibleTabs.isEmpty {
                         Image(systemName: "speaker.wave.2.fill")
@@ -161,7 +172,8 @@ struct SpaceDot: View {
                 }
         }
         .buttonStyle(.plain)
-        .help(number <= 9 ? "\(state.space.name) (⌃\(number))" : state.space.name)
+        .help((state.space.isThrowaway ? "\(state.space.name), throwaway" : state.space.name)
+              + (number <= 9 ? " (⌃\(number))" : ""))
     }
 }
 
@@ -228,24 +240,29 @@ struct SpacePromptSheet: View {
     @State private var name = ""
     @State private var emoji = ""
     @State private var color = SpaceColor.blue
+    @State private var throwaway = false
+    /// Whether the Space being edited was throwaway when the dialog opened.
+    @State private var wasThrowaway = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             switch prompt {
             case .new:
                 nameForm(title: "New Space", action: "Create", except: nil) {
-                    spaces.addSpace(named: name, color: color, emoji: emoji)
+                    spaces.addSpace(named: name, color: color, emoji: emoji, throwaway: throwaway)
                 }
                 .onAppear { (color, emoji) = spaces.freshLook(for: "") }
             case .edit(let id):
                 nameForm(title: "Edit Space", action: "Save", except: id) {
-                    spaces.edit(id, name: name, color: color, emoji: emoji)
+                    spaces.edit(id, name: name, color: color, emoji: emoji, throwaway: throwaway)
                 }
                 .onAppear {
                     guard let space = spaces.state(id)?.space else { return }
                     name = space.name
                     emoji = space.symbol
                     color = space.color ?? .blue
+                    throwaway = space.isThrowaway
+                    wasThrowaway = space.isThrowaway
                 }
             case .delete(let id):
                 let spaceName = spaces.state(id)?.space.name ?? "this Space"
@@ -305,6 +322,22 @@ struct SpacePromptSheet: View {
                 .help("Custom colour")
         }
         .padding(.vertical, 2)
+        Toggle("Throwaway", isOn: $throwaway)
+        Group {
+            if except != nil && throwaway != wasThrowaway {
+                Text(throwaway
+                     ? "Saving closes its tabs, logs you out of everything here and erases its saved logins and history."
+                     : "Saving closes its tabs. From then on, logins and history are kept on disk.")
+                    .foregroundStyle(.orange)
+            } else if throwaway {
+                Text("Logins, site data and history stay in memory, where nothing else on your Mac can read them, and are forgotten when Adequate quits.")
+            } else {
+                Text("Logins, site data and history are kept on disk between launches.")
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
         if taken {
             Text("There's already a Space called \(trimmed).").font(.caption).foregroundStyle(.red)
         }

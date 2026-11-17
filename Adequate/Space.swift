@@ -6,7 +6,8 @@ import Foundation
 import WebKit
 
 /// A Space is a separate browsing identity: its own tabs, and its own cookies,
-/// storage and logins kept in a persistent WebKit data store named by `id`.
+/// storage and logins kept in a persistent WebKit data store named by `id`,
+/// or, for a throwaway Space, held in memory and gone when Adequate quits.
 struct Space: Identifiable, Codable, Hashable {
     let id: UUID
     var name: String
@@ -16,7 +17,11 @@ struct Space: Identifiable, Codable, Hashable {
     var emoji: String?
     /// Sites asked about notifications, and whether they may show them.
     var notifications: [String: Bool]?
+    /// Logins, storage and history never touch the disk, so nothing else
+    /// running as you can read them. Optional so older spaces.json loads.
+    var throwaway: Bool?
 
+    var isThrowaway: Bool { throwaway == true }
     var tint: Color { (color ?? .blue).color }
     var symbol: String { emoji ?? String(name.prefix(1)).uppercased() }
 }
@@ -96,7 +101,7 @@ enum SpaceLook {
 @MainActor
 final class SpaceState: ObservableObject {
     @Published var space: Space
-    let dataStore: WKWebsiteDataStore
+    private(set) var dataStore: WKWebsiteDataStore
     @Published private(set) var tabs: [Tab] = []
     @Published var selectedTabID: Tab.ID? {
         willSet {
@@ -118,7 +123,7 @@ final class SpaceState: ObservableObject {
     /// Camera and microphone allowed for sites in this Space, until Adequate quits.
     let permissions = SitePermissions()
     /// Pages visited in this Space, for address bar suggestions.
-    let history: History
+    private(set) var history: History
     /// Passes each tab's sound changes up, so the Space's dot can show them.
     private var soundWatches: [Tab.ID: AnyCancellable] = [:]
 
@@ -126,8 +131,54 @@ final class SpaceState: ObservableObject {
 
     init(space: Space) {
         self.space = space
-        dataStore = WKWebsiteDataStore(forIdentifier: space.id)
-        history = History(space: space.id)
+        dataStore = Self.store(for: space)
+        history = History(space: space.id, persistent: !space.isThrowaway)
+    }
+
+    private static func store(for space: Space) -> WKWebsiteDataStore {
+        // Each nonPersistent() is a store of its own, so throwaway Spaces
+        // don't share logins with each other either.
+        space.isThrowaway ? .nonPersistent() : WKWebsiteDataStore(forIdentifier: space.id)
+    }
+
+    /// Closes the tabs and starts the Space over with nothing: no logins,
+    /// storage, history or site permissions. Only makes sense for a throwaway
+    /// Space; a kept one would just get its saved logins back.
+    func forgetEverything() {
+        closeAll()
+        permissions.allowed = []
+        if space.notifications != nil {
+            space.notifications = nil
+            persist?()
+        }
+        dataStore = Self.store(for: space)
+        history = History(space: space.id, persistent: !space.isThrowaway)
+    }
+
+    /// Switches between kept and throwaway. Either way the tabs close, since
+    /// they're tied to the old store. Going throwaway erases what was saved.
+    func setThrowaway(_ throwaway: Bool) {
+        guard throwaway != space.isThrowaway else { return }
+        space.throwaway = throwaway ? true : nil
+        let id = space.id
+        forgetEverything()
+        if throwaway { Self.eraseSaved(id) }
+    }
+
+    /// Erases a Space's saved logins, storage and history from disk.
+    static func eraseSaved(_ id: Space.ID) {
+        History.erase(space: id)
+        Task {
+            // The data store can only go once nothing holds it any more,
+            // and closed web views take a moment to let go.
+            for _ in 0..<10 {
+                try? await Task.sleep(for: .seconds(1))
+                do {
+                    try await WKWebsiteDataStore.remove(forIdentifier: id)
+                    return
+                } catch {}
+            }
+        }
     }
 
     var selectedTab: Tab? { tabs.first { $0.id == selectedTabID } }
@@ -481,6 +532,13 @@ final class SpaceStore: ObservableObject {
         tabWindows.append(window)
     }
 
+    /// Starts a throwaway Space over, logged out of everything.
+    func forgetEverything(in id: Space.ID) {
+        guard let state = state(id), state.space.isThrowaway else { return }
+        state.forgetEverything()
+        show(toast: "\(state.space.name) forgot everything")
+    }
+
     func pauseAllMedia() {
         states.flatMap(\.audibleTabs).forEach { $0.pauseMedia() }
     }
@@ -499,20 +557,28 @@ final class SpaceStore: ObservableObject {
         SpaceLook.fresh(avoiding: states.map(\.space), name: name)
     }
 
-    func addSpace(named name: String, color: SpaceColor, emoji: String) {
+    func addSpace(named name: String, color: SpaceColor, emoji: String, throwaway: Bool) {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
-        let state = space(named: name)
-        edit(state.space.id, name: name, color: color, emoji: emoji)
+        guard !isNameTaken(name) else { return }
+        // Made whole here, so a throwaway Space never opens a store on disk.
+        let state = SpaceState(space: Space(id: UUID(), name: name, color: color,
+                                            emoji: emoji.isEmpty ? nil : emoji,
+                                            throwaway: throwaway ? true : nil))
+        if state.space.emoji == nil { state.space.emoji = freshLook(for: name).1 }
+        state.persist = { [weak self] in self?.save() }
+        states.append(state)
+        save()
         select(state.space.id)
     }
 
-    func edit(_ id: Space.ID, name: String, color: SpaceColor, emoji: String) {
+    func edit(_ id: Space.ID, name: String, color: SpaceColor, emoji: String, throwaway: Bool) {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, !isNameTaken(name, except: id), let state = state(id) else { return }
         state.space.name = name
         state.space.color = color
         if !emoji.isEmpty { state.space.emoji = emoji }
+        state.setThrowaway(throwaway)
         objectWillChange.send()
         save()
     }
@@ -525,12 +591,7 @@ final class SpaceStore: ObservableObject {
         if selected == id { select(states[index == 0 ? 1 : index - 1].space.id) }
         states.remove(at: index)
         save()
-        Task {
-            // The data store can only go once nothing holds it any more.
-            try? await Task.sleep(for: .seconds(1))
-            try? await WKWebsiteDataStore.remove(forIdentifier: id)
-            History.erase(space: id)
-        }
+        if !state.space.isThrowaway { SpaceState.eraseSaved(id) }
     }
 
     func move(_ id: Space.ID, by offset: Int) {
