@@ -281,7 +281,9 @@ struct SpacePromptSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 340)
+        .frame(width: 440)
+        // The colour panel goes with the dialog it was picking for.
+        .onDisappear { ColorPanel.shared.close() }
     }
 
     @ViewBuilder
@@ -314,11 +316,19 @@ struct SpacePromptSheet: View {
                     .help(choice.rawValue.capitalized)
             }
             // Anything else, from the system colour panel.
-            ColorPicker("", selection: Binding(get: { color.color }, set: { color = SpaceColor($0) }),
-                        supportsOpacity: false)
-                .labelsHidden()
-                .overlay(Circle().strokeBorder(Color.primary, lineWidth: color.isCustom ? 2 : 0)
-                    .frame(width: 26, height: 26).allowsHitTesting(false))
+            // Anything else: a rainbow swatch that opens the colour panel,
+            // showing the custom colour once one is picked.
+            Circle()
+                .fill(color.isCustom
+                      ? AnyShapeStyle(color.color)
+                      : AnyShapeStyle(AngularGradient(colors: [.red, .yellow, .green, .cyan, .blue, .purple, .red],
+                                                      center: .center)))
+                .frame(width: 20, height: 20)
+                .overlay(Circle().strokeBorder(Color.primary, lineWidth: color.isCustom ? 2 : 0).padding(-3))
+                .contentShape(Circle())
+                .onTapGesture {
+                    ColorPanel.shared.show(color.color) { color = SpaceColor($0) }
+                }
                 .help("Custom colour")
         }
         .padding(.vertical, 2)
@@ -348,6 +358,32 @@ struct SpacePromptSheet: View {
                 .keyboardShortcut(.defaultAction)
                 .disabled(trimmed.isEmpty || taken)
         }
+    }
+}
+
+/// The system colour panel, reporting each colour picked to whoever opened it last.
+@MainActor
+final class ColorPanel: NSObject {
+    static let shared = ColorPanel()
+    private var onChange: ((Color) -> Void)?
+
+    func show(_ color: Color, onChange: @escaping (Color) -> Void) {
+        self.onChange = onChange
+        let panel = NSColorPanel.shared
+        panel.showsAlpha = false
+        panel.setTarget(self)
+        panel.setAction(#selector(changed(_:)))
+        panel.color = NSColor(color)
+        panel.orderFront(nil)
+    }
+
+    func close() {
+        onChange = nil
+        if NSColorPanel.sharedColorPanelExists { NSColorPanel.shared.orderOut(nil) }
+    }
+
+    @objc private func changed(_ panel: NSColorPanel) {
+        onChange?(Color(nsColor: panel.color))
     }
 }
 
