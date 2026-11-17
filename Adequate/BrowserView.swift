@@ -567,6 +567,9 @@ struct TabPage: View {
             .overlay(alignment: .top) {
                 if editing { addressBar }
             }
+            .overlay(alignment: .topTrailing) {
+                if tab.findShown && !editing { FindBar(tab: tab) }
+            }
             .onAppear {
                 draft = tab.address
                 // A blank tab wants an address; one opened with a page wants the page.
@@ -659,6 +662,54 @@ struct TabPage: View {
     }
 }
 
+/// ⌘F: a small bar in the page's corner. Typing finds as you go; Return and
+/// ⌘G go to the next match, ⇧Return and ⌘⇧G the previous; Esc closes it.
+struct FindBar: View {
+    @ObservedObject var tab: Tab
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            AddressField(text: Binding(get: { tab.findText }, set: { tab.findText = $0 }),
+                         placeholder: "Find on page",
+                         onEdit: tab.findChanged,
+                         onMove: { tab.findAgain(backwards: $0 < 0) },
+                         onSubmit: {
+                             tab.findAgain(backwards: NSApp.currentEvent?.modifierFlags.contains(.shift) == true)
+                         },
+                         onCancel: tab.hideFind,
+                         onEndEditing: {})
+                .frame(height: 20)
+                // A fresh field takes the keyboard with its text selected.
+                .id(tab.findRequest)
+            switch tab.findResult {
+            case .notFound:
+                Text("Not found").foregroundStyle(.red)
+            case .found(let count?):
+                Text(count == 1 ? "1 match" : "\(count) matches").foregroundStyle(.secondary)
+            default:
+                EmptyView()
+            }
+            Button { tab.findAgain(backwards: true) } label: { Image(systemName: "chevron.up") }
+                .help("Previous (⇧⌘G)")
+            Button { tab.findAgain(backwards: false) } label: { Image(systemName: "chevron.down") }
+                .help("Next (⌘G)")
+            Button(action: tab.hideFind) { Image(systemName: "xmark") }
+                .help("Close (Esc)")
+        }
+        .font(.system(size: 12))
+        .buttonStyle(.borderless)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .frame(width: 340)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator))
+        .shadow(radius: 12, y: 4)
+        .padding(.trailing, 16)
+        .padding(.top, 10)
+    }
+}
+
 struct SuggestionRow: View {
     let entry: History.Entry
     let chosen: Bool
@@ -686,6 +737,7 @@ struct SuggestionRow: View {
 /// address selected.
 struct AddressField: NSViewRepresentable {
     @Binding var text: String
+    var placeholder = "Search or enter address"
     var onEdit: (String) -> Void
     var onMove: (Int) -> Void
     var onSubmit: () -> Void
@@ -694,7 +746,7 @@ struct AddressField: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSTextField {
         let field = NSTextField(string: text)
-        field.placeholderString = "Search or enter address"
+        field.placeholderString = placeholder
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none

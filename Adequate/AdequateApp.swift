@@ -34,6 +34,11 @@ struct AdequateCommands: Commands {
             Button("Open Location") { spaces.current.selectedTab?.focusRequest += 1 }.keyboardShortcut("l")
             Button("Copy Link") { spaces.copyCurrentLink() }.keyboardShortcut("c", modifiers: [.command, .shift])
             Divider()
+            Button("Find on Page") { spaces.current.selectedTab?.showFind() }.keyboardShortcut("f")
+            Button("Find Next") { spaces.current.selectedTab?.findAgain(backwards: false) }.keyboardShortcut("g")
+            Button("Find Previous") { spaces.current.selectedTab?.findAgain(backwards: true) }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
+            Divider()
             Button("Back") { spaces.current.selectedTab?.goBack() }.keyboardShortcut("[")
             Button("Forward") { spaces.current.selectedTab?.goForward() }.keyboardShortcut("]")
             Button("Reload") { spaces.current.selectedTab?.reload() }.keyboardShortcut("r")

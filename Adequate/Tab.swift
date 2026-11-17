@@ -22,6 +22,20 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     @Published private(set) var isMuted = false
     /// Bumped to ask the address bar to take focus.
     @Published var focusRequest = 0
+    /// The find bar (⌘F) is showing.
+    @Published private(set) var findShown = false
+    /// Bumped to ask the find field to take focus, with its text selected.
+    @Published private(set) var findRequest = 0
+    /// What's being looked for, kept while the bar is closed so ⌘G carries on.
+    @Published var findText = ""
+    @Published private(set) var findResult: FindResult?
+    private var findTask: Task<Void, Never>?
+
+    enum FindResult: Equatable {
+        case notFound
+        /// Found, with how many times the text is on the page, when that's known.
+        case found(count: Int?)
+    }
     /// True until something is loaded: only a blank tab starts in the address bar.
     var isBlank = true
 
@@ -113,6 +127,69 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
         DispatchQueue.main.async { [webView] in
             webView.window?.makeFirstResponder(webView)
         }
+    }
+
+    // MARK: Find
+
+    /// ⌘F: shows the find bar, or takes the keyboard back to it.
+    func showFind() {
+        findShown = true
+        findRequest += 1
+    }
+
+    /// Esc or the close button. The match stays selected, like Safari.
+    func hideFind() {
+        findShown = false
+        findTask?.cancel()
+        focusPage()
+    }
+
+    /// Typing in the find bar: the first match from where you were, so
+    /// adding a letter doesn't skip the match you're looking at.
+    func findChanged(_ text: String) {
+        findText = text
+        findTask?.cancel()
+        guard !text.isEmpty else { findResult = nil; return }
+        findTask = Task {
+            _ = try? await webView.evaluateJavaScript("window.getSelection()?.collapseToStart()")
+            await find(backwards: false)
+        }
+    }
+
+    /// Return, ⌘G (next) or ⇧Return, ⌘⇧G (previous), wrapping around the page.
+    func findAgain(backwards: Bool) {
+        guard !findText.isEmpty else { return showFind() }
+        findTask?.cancel()
+        findTask = Task { await find(backwards: backwards) }
+    }
+
+    private func find(backwards: Bool) async {
+        let text = findText
+        let configuration = WKFindConfiguration()
+        configuration.backwards = backwards
+        configuration.caseSensitive = false
+        configuration.wraps = true
+        let found = await withCheckedContinuation { done in
+            webView.find(text, configuration: configuration) { done.resume(returning: $0.matchFound) }
+        }
+        guard !Task.isCancelled, text == findText else { return }
+        findResult = found ? .found(count: await matchCount(text)) : .notFound
+    }
+
+    /// How often the text appears in the page's visible text, counted in our
+    /// own script world so the page can't tamper with it. Frames aren't
+    /// counted, so this can come up short (or nil) when find still matches.
+    private func matchCount(_ text: String) async -> Int? {
+        let script = """
+            const page = (document.body?.innerText ?? '').toLowerCase();
+            const wanted = text.toLowerCase();
+            let count = 0;
+            for (let at = page.indexOf(wanted); at !== -1; at = page.indexOf(wanted, at + wanted.length)) count++;
+            return count;
+            """
+        let count = try? await webView.callAsyncJavaScript(script, arguments: ["text": text],
+                                                          contentWorld: .defaultClient) as? Int
+        return count.flatMap { $0 > 0 ? $0 : nil }
     }
 
     private static func withoutFragment(_ url: URL) -> String {

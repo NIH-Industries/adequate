@@ -640,6 +640,9 @@ final class SpaceStore: ObservableObject {
             switch (flags, key) {
             case ([.command], "l"): popped.focusRequest += 1
             case ([.command], "r"): popped.reload()
+            case ([.command], "f"): popped.showFind()
+            case ([.command], "g"): popped.findAgain(backwards: false)
+            case ([.command, .shift], "g"): popped.findAgain(backwards: true)
             case ([.command], "["): popped.goBack()
             case ([.command], "]"): popped.goForward()
             case ([.command, .option], "i"): popped.showDeveloperTools()
@@ -661,6 +664,9 @@ final class SpaceStore: ObservableObject {
         case ([.command], "l"): tab?.focusRequest += 1
         case ([.command], "s"): sidebarShown.toggle()
         case ([.command], "r"): tab?.reload()
+        case ([.command], "f"): tab?.showFind()
+        case ([.command], "g"): tab?.findAgain(backwards: false)
+        case ([.command, .shift], "g"): tab?.findAgain(backwards: true)
         case ([.command, .option], "i"): tab?.showDeveloperTools()
         case ([.command], "["): tab?.goBack()
         case ([.command], "]"): tab?.goForward()
