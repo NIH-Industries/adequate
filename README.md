@@ -49,6 +49,11 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
 - **Local files**: an html file can read the files in its own folder (so a
   report's images load), unless that folder is a catch-all one like
   Downloads, Desktop or your home folder: then it can only read itself.
+- **Split view**: two tabs side by side (⌘\\, or drag one tab onto another,
+  or right-click › Open in Split View). Click a pane to use it: it gets the
+  Space's colour, and shortcuts, ⌘W and the site name act on it. Clicking
+  another tab replaces the left pane; going to the right-hand tab any other
+  way (⌃Tab, ⌘1–9) leaves the split.
 - **Fresh start**: tabs aren't kept between launches; Spaces and logins are.
 
 ## Keys
@@ -71,6 +76,7 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
 | ⌘⇧A | next tab playing sound, in any Space |
 | ⌘= / ⌘- / ⌘0 | zoom in / out / actual size |
 | ⌘-click a link | open it in a background tab |
+| ⌘\\ | split view: a new tab beside this one, or back to one pane |
 
 ## Build
 
