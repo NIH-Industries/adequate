@@ -285,6 +285,7 @@ final class SpaceState: ObservableObject {
             MediaWatch.install(in: config, for: self)
             PageNotifications.install(in: config, for: self)
             PageLocation.install(in: config, for: self)
+            FocusWatch.install(in: config, for: self)
             installScripts(in: config.userContentController)
             return config
         }()
@@ -356,6 +357,7 @@ final class SpaceState: ObservableObject {
         controller.addUserScript(MediaWatch.userScript)
         controller.addUserScript(PageNotifications.script(decisions: space.notifications ?? [:]))
         controller.addUserScript(PageLocation.script)
+        controller.addUserScript(OnePassword.focusScript)
     }
 
     /// Forgets everything a site has been allowed or refused in this Space,
@@ -562,12 +564,19 @@ final class SpaceStore: ObservableObject {
         return true
     }
 
-    func show(toast message: String) {
-        toast = message
+    func show(toast message: String, lasting: Duration = .seconds(1.5)) {
+        toast = message.isEmpty ? nil : message
         toastTask?.cancel()
         toastTask = Task {
-            try? await Task.sleep(for: .seconds(1.5))
+            try? await Task.sleep(for: lasting)
             if !Task.isCancelled { toast = nil }
+        }
+    }
+
+    /// ⌘⇧P. A "…" toast (still looking) stays until the next one, or an empty one clears it.
+    func fillFromOnePassword(in tab: Tab?) {
+        tab?.fillFromOnePassword { [weak self] message in
+            self?.show(toast: message, lasting: message.hasSuffix("…") ? .seconds(60) : .seconds(3))
         }
     }
 
@@ -744,6 +753,7 @@ final class SpaceStore: ObservableObject {
             case ([.command], "["): popped.goBack()
             case ([.command], "]"): popped.goForward()
             case ([.command, .option], "i"): popped.showDeveloperTools()
+            case ([.command, .shift], "p"): fillFromOnePassword(in: popped)
             default: return event
             }
             return nil
@@ -767,6 +777,7 @@ final class SpaceStore: ObservableObject {
         case ([.command], "g"): tab?.findAgain(backwards: false)
         case ([.command, .shift], "g"): tab?.findAgain(backwards: true)
         case ([.command, .option], "i"): tab?.showDeveloperTools()
+        case ([.command, .shift], "p"): fillFromOnePassword(in: tab)
         case ([.command], "["): tab?.goBack()
         case ([.command], "]"): tab?.goForward()
         case ([.command], "="), ([.command, .shift], "="), ([.command], "+"), ([.command, .shift], "+"):

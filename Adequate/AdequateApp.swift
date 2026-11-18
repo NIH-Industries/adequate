@@ -33,6 +33,8 @@ struct AdequateCommands: Commands {
             Divider()
             Button("Open Location") { spaces.current.activeTab?.focusRequest += 1 }.keyboardShortcut("l")
             Button("Copy Link") { spaces.copyCurrentLink() }.keyboardShortcut("c", modifiers: [.command, .shift])
+            Button("Fill from 1Password") { spaces.fillFromOnePassword(in: spaces.current.activeTab) }
+                .keyboardShortcut("p", modifiers: [.command, .shift])
             Divider()
             Button("Find on Page") { spaces.current.activeTab?.showFind() }.keyboardShortcut("f")
             Button("Find Next") { spaces.current.activeTab?.findAgain(backwards: false) }.keyboardShortcut("g")

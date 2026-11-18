@@ -19,8 +19,13 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
   per-user token, so web pages can't forge them.
 - **Default browser**: links from other apps open as a tab in the current Space.
   Use Adequate › Make Adequate the Default Browser.
-- **No extensions**: WKWebView apps can't load them, so passwords come from
-  the 1Password app (Quick Access, ⌘⇧Space) by copy and paste.
+- **No extensions**: WKWebView apps can't load them. Logins come from
+  1Password through its CLI instead: ⌘⇧P lists the logins saved for the site
+  you're on, in every 1Password account (that site and its subdomains only, so a lookalike gets nothing)
+  and fills the one you pick, or a one-time code into a code field (otherwise
+  the code is copied, and cleared a minute later). Needs `op` (`brew install
+  1password-cli`) and 1Password › Settings › Developer › Integrate with
+  1Password CLI; unlocking is 1Password's own Touch ID. Not on plain HTTP.
 - **Sound**: a tab playing sound shows a speaker (click it to mute), and its
   Space's dot gets one too. Tab › Pause All Media hushes everything.
 - **Video calls**: pages can use the camera and microphone once you allow
@@ -64,6 +69,7 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
 | ⌘L | address bar (it floats over the page) |
 | ⌘S | show / hide the sidebar |
 | ⌘⇧C | copy the current page's address |
+| ⌘⇧P | fill a login from 1Password |
 | ⌘F | find on the page: Return / ⇧Return (or ⌘G / ⌘⇧G) for next / previous, Esc to close and clear the highlight |
 | ⌘[ / ⌘] | back / forward |
 | ⌘R | reload |

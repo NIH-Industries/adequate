@@ -60,6 +60,8 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     private var askingToOpen = false
     /// Waiting on the location question that's showing.
     private var locationWaiters: [(Bool) -> Void] = []
+    /// The frame with the field you were last in, where ⌘⇧P fills.
+    var focusedFrame: WKFrameInfo?
     /// Frames that have told MediaWatch about their media, by the id each
     /// page's script picks, and which of them are playing sound.
     private var mediaFrames: [String: WKFrameInfo] = [:]
@@ -485,6 +487,7 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
         // A fresh page (or a reload) may ask again about anything refused.
         forgetRefusals()
         Locator.shared.forget(webView)
+        focusedFrame = nil
         // A new page: the old one's frames and sound are gone. Muting stays with the tab.
         mediaFrames = [:]
         audibleFrames = []
