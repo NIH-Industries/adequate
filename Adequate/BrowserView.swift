@@ -203,6 +203,8 @@ struct DownloadRow: View {
                 }
             }
         }
+        // Hover buttons don't change the height.
+        .frame(minHeight: 20)
         .padding(.vertical, 3)
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
@@ -357,6 +359,9 @@ struct TabRow: View {
                     .help(tab.isPinned ? "Put to sleep (stays pinned)" : "Close Tab")
             }
         }
+        // One height whatever's showing, so hovering (pin, close) or a
+        // sound starting doesn't nudge every tab below.
+        .frame(height: 20)
         // Room to breathe between tabs.
         .padding(.vertical, 5)
         .contentShape(Rectangle())
