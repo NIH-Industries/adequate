@@ -1,0 +1,19 @@
+name = "Ask before leaving a page with unsaved changes"
+status = "todo"
+description = """
+A page's 'Leave this page? Changes you made may not be saved' (beforeunload) never shows, so ⌘W or a reload throws away an unsent draft or half-filled form without asking.
+
+## What it takes
+1. WebKit's private UI delegate method _webView:runBeforeUnloadConfirmPanelWithMessage:initiatedByFrame:completionHandler: — check the SDK for a public version first, as with geolocation.
+2. Show it with ask(): Leave / Stay, Return picks Stay.
+3. Closing a tab (⌘W, the sidebar's close button, closing a Space's tabs, quitting) must go through the page first, so it can object: there's no WKWebView API to run beforeunload, so it may need the private _tryClose / evaluate-and-wait approach. Reloads and navigations already trigger it.
+
+## Notes
+- Without (3) this only protects reloads and links, not ⌘W, which is the case that matters most."""
+created_at = "2026-11-18T02:21:29.628639Z"
+updated_at = "2026-11-18T02:21:29.628639Z"
+tags = [
+    "idea",
+    "pages",
+]
+priority = "medium"

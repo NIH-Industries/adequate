@@ -1,0 +1,20 @@
+name = "Upload files from pages"
+status = "todo"
+description = """
+Clicking an <input type="file"> does nothing: attaching in Gmail, uploading to Drive, picking an avatar. WebKit asks the app to show the open panel and Adequate never answers, so the page gets no files. Same silent no as confirm() had.
+
+## What it takes
+1. Implement WKUIDelegate webView(_:runOpenPanelWith:initiatedByFrame:completionHandler:) in Tab.swift.
+2. Show an NSOpenPanel as a sheet on the tab's window: allowsMultipleSelection and canChooseDirectories from the WKOpenPanelParameters; hand back the URLs, or nil on Cancel.
+3. Drag and drop of files onto a page should already work; check it does.
+
+## Notes
+- Small: one delegate method, like the JS dialogs."""
+created_at = "2026-11-18T02:21:29.604908Z"
+updated_at = "2026-11-18T02:21:29.604908Z"
+tags = [
+    "idea",
+    "pages",
+    "basics",
+]
+priority = "high"

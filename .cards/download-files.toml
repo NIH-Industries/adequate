@@ -1,0 +1,23 @@
+name = "Download files"
+status = "todo"
+description = """
+Links and responses that should save a file (PDFs served as attachments, CSV exports, zips) do nothing. No WKDownload handling at all.
+
+## What it takes
+1. In decidePolicyFor navigationResponse: if !navigationResponse.canShowMIMEType, or Content-Disposition says attachment, answer .download. Also navigationAction.shouldPerformDownload (<a download>) → .download.
+2. WKNavigationDelegate navigationAction/navigationResponse didBecome download: set a WKDownloadDelegate.
+3. decideDestinationUsing: ~/Downloads/<suggestedFilename>, made unique (" 2") if it exists. Blob and data URLs come through the same path.
+4. Show progress somewhere a page can't draw: a row at the bottom of the sidebar, or a toast, with the download's Progress; click a finished one to reveal in Finder.
+5. Set the quarantine attribute (com.apple.quarantine) on finished files so Gatekeeper checks downloaded apps.
+
+## Notes
+- Downloads in a throwaway Space still land in ~/Downloads (they're files you asked for), but say so in the README.
+- Local files: a downloaded html in Downloads can only read itself (already handled)."""
+created_at = "2026-11-18T02:21:29.609436Z"
+updated_at = "2026-11-18T02:21:29.609436Z"
+tags = [
+    "idea",
+    "pages",
+    "basics",
+]
+priority = "high"

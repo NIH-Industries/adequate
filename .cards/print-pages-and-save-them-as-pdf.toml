@@ -1,0 +1,19 @@
+name = "Print pages and save them as PDF"
+status = "todo"
+description = """
+⌘P does nothing. Receipts, boarding passes and tickets need printing or saving as PDF.
+
+## What it takes
+1. ⌘P (menu item and the key monitor) → webView.printOperation(with: NSPrintInfo.shared), runOperationModal(for: window...) so it's a sheet.
+2. Pages calling window.print(): WebKit's private UI delegate _webView:printFrame:pdfFirstPageSize:completionHandler: (or printFrame:) — check which the SDK has, as with screen sharing.
+3. The print panel's PDF menu already offers Save as PDF.
+
+## Notes
+- printOperation needs the view sized; set printInfo's horizontal/vertical pagination to fit."""
+created_at = "2026-11-18T02:21:29.624647Z"
+updated_at = "2026-11-18T02:21:29.624647Z"
+tags = [
+    "idea",
+    "pages",
+]
+priority = "low"

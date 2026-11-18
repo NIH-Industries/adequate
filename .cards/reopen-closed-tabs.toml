@@ -1,0 +1,19 @@
+name = "Reopen closed tabs"
+status = "todo"
+description = """
+⌘⇧T to bring back the tab you just closed, in its Space, at its old place in the sidebar. Easy to close the wrong tab with ⌘W, especially now ⌘W acts on the active split pane.
+
+## What it takes
+1. Each Space keeps a short stack (say 20) of closed tabs: address, title, position. Not kept between launches, like tabs.
+2. ⌘⇧T pops the top one and loads it; File/Tab menu item too.
+3. Back/forward history can't be carried over from a WKWebView, so it comes back as a fresh load of the last address. Say so in the README.
+
+## Notes
+- Throwaway Spaces: the stack is in memory anyway, and goes with Forget Everything."""
+created_at = "2026-11-18T02:21:29.620828Z"
+updated_at = "2026-11-18T02:21:29.620828Z"
+tags = [
+    "idea",
+    "tabs",
+]
+priority = "medium"

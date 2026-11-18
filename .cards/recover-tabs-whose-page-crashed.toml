@@ -1,0 +1,19 @@
+name = "Recover tabs whose page crashed"
+status = "todo"
+description = """
+When a page's web content process dies (out of memory, a WebKit bug, the Mac reclaiming memory from background tabs) the tab goes blank and stays blank until you notice and reload.
+
+## What it takes
+1. WKNavigationDelegate webViewWebContentProcessDidTerminate(_:): reload if the tab is on screen; otherwise mark it and reload when it's next selected (so a dozen background tabs don't all reload at once).
+2. If it crashes again straight after reloading, stop and show a message in the tab instead of looping.
+
+## Notes
+- Clear the tab's media state (sound icon) too: the process that was playing is gone."""
+created_at = "2026-11-18T02:21:29.617116Z"
+updated_at = "2026-11-18T02:21:29.617116Z"
+tags = [
+    "idea",
+    "pages",
+    "basics",
+]
+priority = "medium"

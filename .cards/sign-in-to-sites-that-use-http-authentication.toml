@@ -1,0 +1,21 @@
+name = "Sign in to sites that use HTTP authentication"
+status = "todo"
+description = """
+Pages behind HTTP basic or digest auth (staging sites, routers, some internal tools) just fail: there's no handler for authentication challenges, so WebKit cancels them.
+
+## What it takes
+1. WKNavigationDelegate webView(_:didReceive:completionHandler:): for NSURLAuthenticationMethodHTTPBasic / HTTPDigest, ask with a sheet naming the host and realm, with user and password fields (the ask() helper takes an accessory view now).
+2. Answer .useCredential with URLCredential(persistence: .forSession); Cancel → .cancelAuthenticationChallenge. Everything else (server trust, client certs) → .performDefaultHandling.
+3. Show the challenge's proposedCredential's user if there is one; after a failed attempt (previousFailureCount > 0) say the password was wrong.
+
+## Notes
+- Passwords from 1Password by copy and paste, as everywhere else.
+- Don't store credentials: forSession only."""
+created_at = "2026-11-18T02:21:29.613247Z"
+updated_at = "2026-11-18T02:21:29.613247Z"
+tags = [
+    "idea",
+    "pages",
+    "auth",
+]
+priority = "medium"
