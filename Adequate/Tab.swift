@@ -358,10 +358,14 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     /// `defaultButton` is the one Return presses: the safe answer, so a page
     /// can't ask just as you're typing and have Return say yes.
     private func ask(_ message: String, detail: String? = nil, buttons: [String], defaultButton: Int = 0,
-                     then: @escaping (Int) -> Void) {
+                     accessory: NSView? = nil, then: @escaping (Int) -> Void) {
         let alert = NSAlert()
         alert.messageText = message
         if let detail { alert.informativeText = detail }
+        if let accessory {
+            alert.accessoryView = accessory
+            alert.window.initialFirstResponder = accessory
+        }
         buttons.forEach { alert.addButton(withTitle: $0) }
         for (index, button) in alert.buttons.enumerated() {
             button.keyEquivalent = index == defaultButton ? "\r" : index == buttons.count - 1 ? "\u{1b}" : ""
@@ -401,6 +405,35 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
             self?.remember(key, allowed: choice == 0)
             if choice == 0 { NSWorkspace.shared.open(url) }
         }
+    }
+
+    // alert(), confirm() and prompt(): without these WebKit answers for the
+    // page at once (confirm() is false), so a delete button that confirms
+    // first just does nothing.
+
+    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
+                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor () -> Void) {
+        ask(Self.says(frame), detail: message, buttons: ["OK"]) { _ in completionHandler() }
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
+                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor (Bool) -> Void) {
+        ask(Self.says(frame), detail: message, buttons: ["OK", "Cancel"]) { completionHandler($0 == 0) }
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String,
+                 defaultText: String?, initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping @MainActor (String?) -> Void) {
+        let field = NSTextField(string: defaultText ?? "")
+        field.frame = NSRect(x: 0, y: 0, width: 300, height: 24)
+        ask(Self.says(frame), detail: prompt, buttons: ["OK", "Cancel"], accessory: field) {
+            completionHandler($0 == 0 ? field.stringValue : nil)
+        }
+    }
+
+    /// Whose question it is: a pop-up from a page can't pass itself off as Adequate.
+    private static func says(_ frame: WKFrameInfo) -> String {
+        "\(site(frame.securityOrigin)) says"
     }
 
     func webViewDidClose(_ webView: WKWebView) {
