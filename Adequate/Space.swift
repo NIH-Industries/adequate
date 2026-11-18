@@ -108,8 +108,21 @@ final class SpaceState: ObservableObject {
             // Picture the tab we're leaving while it's still on screen.
             if newValue != selectedTabID { selectedTab?.captureSnapshot() }
         }
-        didSet { if let id = selectedTabID { touch(id) } }
+        didSet {
+            if let id = selectedTabID { touch(id) }
+            if selectedTabID != oldValue {
+                // Going to a tab replaces the left pane; the one on the right
+                // can't also be the left one, so it goes back to being a tab.
+                if selectedTabID == splitTabID { splitTabID = nil }
+                splitActive = false
+            }
+        }
     }
+
+    /// Split view: a second tab shown beside the selected one.
+    @Published private(set) var splitTabID: Tab.ID?
+    /// The right-hand pane is the one you're using, so shortcuts and ⌘W act on it.
+    @Published var splitActive = false
 
     /// Tab ids, most recently used first. Ctrl-Tab walks this order.
     private var mru: [Tab.ID] = []
@@ -182,6 +195,70 @@ final class SpaceState: ObservableObject {
     }
 
     var selectedTab: Tab? { tabs.first { $0.id == selectedTabID } }
+    var splitTab: Tab? { splitTabID.flatMap { id in tabs.first { $0.id == id } } }
+    /// The tab you're using: the one in the active pane.
+    var activeTab: Tab? { splitActive ? (splitTab ?? selectedTab) : selectedTab }
+
+    /// Puts an existing tab beside the selected one.
+    func openSplit(with id: Tab.ID) {
+        guard id != selectedTabID, selectedTab != nil, tabs.contains(where: { $0.id == id }) else { return }
+        splitTabID = id
+        splitActive = true
+        splitTab?.focusPage()
+    }
+
+    /// Drag one tab onto another: the target on the left, the dragged tab on the right.
+    func split(_ dragged: Tab.ID, onto target: Tab.ID) {
+        guard dragged != target,
+              tabs.contains(where: { $0.id == dragged }),
+              tabs.contains(where: { $0.id == target }) else { return }
+        selectedTabID = target
+        splitTabID = dragged
+        splitActive = true
+        splitTab?.focusPage()
+    }
+
+    /// ⌘\: a new tab beside this one, or back to one pane if already split.
+    func toggleSplit() {
+        if splitTabID != nil { return closeSplit() }
+        guard selectedTab != nil else { newTab(); return }
+        let tab = newTab(background: true)
+        splitTabID = tab.id
+        splitActive = true
+    }
+
+    /// Back to one pane. You stay on the tab you were using.
+    func closeSplit() {
+        guard splitTabID != nil else { return }
+        let keep = splitActive ? splitTabID : selectedTabID
+        splitTabID = nil
+        splitActive = false
+        selectedTabID = keep
+    }
+
+    /// A sidebar click: the right-hand tab takes the keyboard, any other
+    /// replaces the left-hand one.
+    func choose(_ id: Tab.ID?) {
+        if let id, id == splitTabID {
+            splitActive = true
+            splitTab?.focusPage()
+        } else {
+            selectedTabID = id
+            splitActive = false
+            selectedTab?.focusPage()
+        }
+    }
+
+    /// A tab is leaving the sidebar (closed, or popped into a window): keep the
+    /// selection and the split sensible. Call once it's out of `tabs` and `mru`.
+    private func left(_ id: Tab.ID) {
+        let promoted = id == selectedTabID ? splitTabID : nil
+        if id == splitTabID || promoted != nil {
+            splitTabID = nil
+            splitActive = false
+        }
+        if selectedTabID == id { selectedTabID = promoted ?? mru.first }
+    }
 
     /// Opens a tab and selects it, unless `background`, when it goes in
     /// behind the current one.
@@ -256,6 +333,8 @@ final class SpaceState: ObservableObject {
         tabs = []
         soundWatches = [:]
         mru = []
+        splitTabID = nil
+        splitActive = false
         selectedTabID = nil
     }
 
@@ -266,7 +345,7 @@ final class SpaceState: ObservableObject {
         tabs.remove(at: index)
         soundWatches[id] = nil
         mru.removeAll { $0 == id }
-        if selectedTabID == id { selectedTabID = mru.first }
+        left(id)
     }
 
     /// Saves the Spaces, set by SpaceStore.
@@ -320,12 +399,13 @@ final class SpaceState: ObservableObject {
         let tab = tabs.remove(at: index)
         mru.removeAll { $0 == id }
         soundWatches[id] = nil
-        if selectedTabID == id { selectedTabID = mru.first }
+        left(id)
         return tab
     }
 
+    /// Closes the tab you're using: the active pane's.
     func closeSelected() -> Bool {
-        guard let id = selectedTabID else { return false }
+        guard let id = activeTab?.id else { return false }
         close(id)
         return true
     }
@@ -475,7 +555,7 @@ final class SpaceStore: ObservableObject {
     /// ⌘⇧C: the current page's address onto the clipboard.
     @discardableResult
     func copyCurrentLink() -> Bool {
-        guard let address = current.selectedTab?.address, !address.isEmpty else { return false }
+        guard let address = current.activeTab?.address, !address.isEmpty else { return false }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(address, forType: .string)
         show(toast: "Copied link")
@@ -608,7 +688,7 @@ final class SpaceStore: ObservableObject {
     // Shortcuts go through a local monitor so they win over the web view
     // and over the window's own ⌘W.
     private func installKeyMonitor() {
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged, .leftMouseDown]) { [weak self] event in
             guard let self else { return event }
             return MainActor.assumeIsolated { self.handle(event) }
         }
@@ -620,7 +700,22 @@ final class SpaceStore: ObservableObject {
         }
     }
 
+    /// Clicking into a pane of a split view makes it the one shortcuts act on.
+    private func noteClick(_ event: NSEvent) {
+        guard event.window === mainWindow, let left = current.selectedTab, let right = current.splitTab,
+              let hit = event.window?.contentView?.hitTest(event.locationInWindow) else { return }
+        if hit.isDescendant(of: right.webView) {
+            current.splitActive = true
+        } else if hit.isDescendant(of: left.webView) {
+            current.splitActive = false
+        }
+    }
+
     private func handle(_ event: NSEvent) -> NSEvent? {
+        if event.type == .leftMouseDown {
+            noteClick(event)
+            return event
+        }
         let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
 
         if event.type == .flagsChanged {
@@ -654,7 +749,7 @@ final class SpaceStore: ObservableObject {
             return nil
         }
         if let window = event.window, window !== mainWindow { return event }
-        let tab = current.selectedTab
+        let tab = current.activeTab
         let tabKey: UInt16 = 48
 
         if event.keyCode == tabKey, flags.contains(.control), !flags.contains(.command) {
@@ -666,6 +761,7 @@ final class SpaceStore: ObservableObject {
         case ([.command], "w"): return current.closeSelected() ? nil : event
         case ([.command], "l"): tab?.focusRequest += 1
         case ([.command], "s"): sidebarShown.toggle()
+        case ([.command], "\\"): current.toggleSplit()
         case ([.command], "r"): tab?.reload()
         case ([.command], "f"): tab?.showFind()
         case ([.command], "g"): tab?.findAgain(backwards: false)

@@ -31,35 +31,37 @@ struct AdequateCommands: Commands {
             Button("New Tab") { spaces.current.newTab() }.keyboardShortcut("t")
             Button("Close Tab") { _ = spaces.current.closeSelected() }.keyboardShortcut("w")
             Divider()
-            Button("Open Location") { spaces.current.selectedTab?.focusRequest += 1 }.keyboardShortcut("l")
+            Button("Open Location") { spaces.current.activeTab?.focusRequest += 1 }.keyboardShortcut("l")
             Button("Copy Link") { spaces.copyCurrentLink() }.keyboardShortcut("c", modifiers: [.command, .shift])
             Divider()
-            Button("Find on Page") { spaces.current.selectedTab?.showFind() }.keyboardShortcut("f")
-            Button("Find Next") { spaces.current.selectedTab?.findAgain(backwards: false) }.keyboardShortcut("g")
-            Button("Find Previous") { spaces.current.selectedTab?.findAgain(backwards: true) }
+            Button("Find on Page") { spaces.current.activeTab?.showFind() }.keyboardShortcut("f")
+            Button("Find Next") { spaces.current.activeTab?.findAgain(backwards: false) }.keyboardShortcut("g")
+            Button("Find Previous") { spaces.current.activeTab?.findAgain(backwards: true) }
                 .keyboardShortcut("g", modifiers: [.command, .shift])
             Divider()
-            Button("Back") { spaces.current.selectedTab?.goBack() }.keyboardShortcut("[")
-            Button("Forward") { spaces.current.selectedTab?.goForward() }.keyboardShortcut("]")
-            Button("Reload") { spaces.current.selectedTab?.reload() }.keyboardShortcut("r")
-            Button("Developer Tools") { spaces.current.selectedTab?.showDeveloperTools() }
+            Button("Back") { spaces.current.activeTab?.goBack() }.keyboardShortcut("[")
+            Button("Forward") { spaces.current.activeTab?.goForward() }.keyboardShortcut("]")
+            Button("Reload") { spaces.current.activeTab?.reload() }.keyboardShortcut("r")
+            Button("Developer Tools") { spaces.current.activeTab?.showDeveloperTools() }
                 .keyboardShortcut("i", modifiers: [.command, .option])
             Divider()
-            Button("Zoom In") { spaces.current.selectedTab?.zoom(by: 0.1) }.keyboardShortcut("=")
-            Button("Zoom Out") { spaces.current.selectedTab?.zoom(by: -0.1) }.keyboardShortcut("-")
-            Button("Actual Size") { spaces.current.selectedTab?.zoom(by: nil) }.keyboardShortcut("0")
+            Button("Zoom In") { spaces.current.activeTab?.zoom(by: 0.1) }.keyboardShortcut("=")
+            Button("Zoom Out") { spaces.current.activeTab?.zoom(by: -0.1) }.keyboardShortcut("-")
+            Button("Actual Size") { spaces.current.activeTab?.zoom(by: nil) }.keyboardShortcut("0")
             Divider()
             Button("Previous Tab") { spaces.current.selectAdjacentTab(-1) }.keyboardShortcut("[", modifiers: [.command, .shift])
             Button("Next Tab") { spaces.current.selectAdjacentTab(1) }.keyboardShortcut("]", modifiers: [.command, .shift])
             Divider()
-            Button("Mute / Unmute Tab") { spaces.current.selectedTab?.toggleMute() }
+            Button("Mute / Unmute Tab") { spaces.current.activeTab?.toggleMute() }
             Button("Go to Tab Playing Sound") { spaces.showPlayingTab() }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
             Button("Pause All Media") { spaces.pauseAllMedia() }
             Button("Open Tab in New Window") {
-                if let id = spaces.current.selectedTabID { spaces.openInNewWindow(id, from: spaces.current) }
+                if let id = spaces.current.activeTab?.id { spaces.openInNewWindow(id, from: spaces.current) }
             }
             Divider()
+            Button("Split View: Open / Close") { spaces.current.toggleSplit() }.keyboardShortcut("\\")
+            Text("Click a pane to use it. Right-click a tab: Open in Split View")
             Text("Recent Tabs: ⌃Tab / ⌃⇧Tab")
             Text("Tab 1–8: ⌘1–⌘8, Last Tab: ⌘9")
         }

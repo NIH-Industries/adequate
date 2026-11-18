@@ -52,7 +52,7 @@ struct Sidebar: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(state.space.name).font(.headline).lineLimit(1)
                     // Where you are, somewhere a page can't draw over.
-                    if let tab = state.selectedTab { SiteLabel(tab: tab) }
+                    if let tab = state.activeTab { SiteLabel(tab: tab) }
                 }
                 Spacer()
                 Menu {
@@ -68,10 +68,21 @@ struct Sidebar: View {
             .padding(.top, 8)
             .padding(.bottom, 14)
 
-            List(selection: $state.selectedTabID) {
+            List(selection: Binding(get: { state.selectedTabID }, set: { state.choose($0) })) {
                 ForEach(state.tabs) { tab in
-                    TabRow(tab: tab, close: { state.close(tab.id) },
+                    TabRow(tab: tab,
+                           inSplit: state.splitTabID == tab.id,
+                           canSplit: state.selectedTabID != tab.id,
+                           close: { state.close(tab.id) },
                            popOut: { spaces.openInNewWindow(tab.id, from: state) },
+                           openSplit: { state.openSplit(with: tab.id) },
+                           closeSplit: state.closeSplit,
+                           dropTab: { items in
+                               // Another tab dragged onto this one: show the two side by side.
+                               guard let text = items.first, let dragged = UUID(uuidString: text) else { return false }
+                               state.split(dragged, onto: tab.id)
+                               return true
+                           },
                            resetPermissions: { site in
                                state.resetPermissions(for: site)
                                spaces.show(toast: "\(site) can ask again")
@@ -179,10 +190,19 @@ struct SpaceDot: View {
 
 struct TabRow: View {
     @ObservedObject var tab: Tab
+    /// This tab is the right-hand pane of a split view.
+    let inSplit: Bool
+    /// It isn't the left-hand tab, so it can go beside it.
+    let canSplit: Bool
     let close: () -> Void
     let popOut: () -> Void
+    let openSplit: () -> Void
+    let closeSplit: () -> Void
+    /// Another tab (its id, as text) was dropped on this row.
+    let dropTab: ([String]) -> Bool
     let resetPermissions: (String) -> Void
     @State private var hovering = false
+    @State private var dropTargeted = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -197,6 +217,11 @@ struct TabRow: View {
             Text(tab.displayTitle).lineLimit(1)
                 .help(tab.address)
             Spacer()
+            if inSplit {
+                Image(systemName: "rectangle.righthalf.inset.filled")
+                    .foregroundStyle(.secondary)
+                    .help("In split view, on the right")
+            }
             if tab.isPlayingAudio || tab.isMuted {
                 Button(action: tab.toggleMute) {
                     Image(systemName: tab.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
@@ -211,7 +236,12 @@ struct TabRow: View {
         }
         // Room to breathe between tabs.
         .padding(.vertical, 5)
+        .contentShape(Rectangle())
         .onHover { hovering = $0 }
+        // Drag this tab onto another to open them in a split view.
+        .draggable(tab.id.uuidString)
+        .dropDestination(for: String.self) { items, _ in dropTab(items) } isTargeted: { dropTargeted = $0 }
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(dropTargeted ? 0.3 : 0)))
         .contextMenu {
             Button("Copy Link") {
                 NSPasteboard.general.clearContents()
@@ -226,6 +256,11 @@ struct TabRow: View {
                 Button("Reset Permissions for \(site)") { resetPermissions(site) }
             }
             Divider()
+            if inSplit {
+                Button("Close Split View", action: closeSplit)
+            } else {
+                Button("Open in Split View", action: openSplit).disabled(!canSplit)
+            }
             Button("Open in New Window", action: popOut)
             Button("Close Tab", action: close)
         }
@@ -431,7 +466,7 @@ struct SiteBadge: View {
     @ObservedObject var state: SpaceState
 
     var body: some View {
-        if let tab = state.selectedTab, !tab.address.isEmpty {
+        if let tab = state.activeTab, !tab.address.isEmpty {
             SiteLabel(tab: tab)
                 .padding(.horizontal, 8).padding(.vertical, 3)
                 .background(.regularMaterial, in: Capsule())
@@ -530,7 +565,15 @@ struct SpaceDetail: View {
 
     var body: some View {
         if let tab = state.selectedTab {
-            TabPage(tab: tab).id(tab.id)
+            if let split = state.splitTab {
+                // Two pages side by side. The active one wears the Space's colour.
+                HSplitView {
+                    pane(tab, active: !state.splitActive)
+                    pane(split, active: state.splitActive)
+                }
+            } else {
+                TabPage(tab: tab).id(tab.id)
+            }
         } else {
             VStack(spacing: 12) {
                 Text(state.space.symbol).font(.system(size: 64))
@@ -539,6 +582,18 @@ struct SpaceDetail: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private func pane(_ tab: Tab, active: Bool) -> some View {
+        TabPage(tab: tab)
+            .id(tab.id)
+            .frame(minWidth: 240)
+            .overlay {
+                Rectangle()
+                    .strokeBorder(active ? state.space.tint.opacity(0.8) : .clear, lineWidth: 2)
+                    .allowsHitTesting(false)
+            }
+            .ignoresSafeArea(edges: .top)
     }
 }
 
