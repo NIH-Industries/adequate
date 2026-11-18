@@ -60,7 +60,8 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
   Space's colour, and shortcuts, ⌘W and the site name act on it. Clicking
   another tab replaces the left pane; going to the right-hand tab any other
   way (⌃Tab, ⌘1–9) leaves the split.
-- **Pinned tabs**: right-click a tab › Pin Tab to keep it. Pins sit at the
+- **Pinned tabs**: hover a tab and click its pin (or right-click › Pin Tab)
+  to keep it. Pins sit at the
   top of the sidebar and come back after a restart, asleep (dimmed) until you
   click one, so they cost nothing until used. A pin always comes back to the
   address you pinned, wherever you browse in it (right-click › Back to Pinned

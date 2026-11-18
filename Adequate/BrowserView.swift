@@ -248,7 +248,16 @@ struct TabRow: View {
                 .help(tab.isMuted ? "Unmute Tab" : "Mute Tab")
             }
             if hovering {
-                Button(action: close) { Image(systemName: "xmark") }.buttonStyle(.borderless)
+                if tab.isPinned || (canPin && ["http", "https", "file"].contains(URL(string: tab.address)?.scheme ?? "")) {
+                    Button(action: togglePin) {
+                        Image(systemName: tab.isPinned ? "pin.slash" : "pin")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(tab.isPinned ? "Unpin Tab" : "Pin Tab: keep it after a restart")
+                }
+                Button(action: close) { Image(systemName: "xmark") }
+                    .buttonStyle(.borderless)
+                    .help(tab.isPinned ? "Put to sleep (stays pinned)" : "Close Tab")
             }
         }
         // Room to breathe between tabs.
