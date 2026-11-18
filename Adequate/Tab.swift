@@ -58,6 +58,8 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     private var refused: Set<String> = []
     /// A question about opening another app is showing: further asks wait.
     private var askingToOpen = false
+    /// Waiting on the location question that's showing.
+    private var locationWaiters: [(Bool) -> Void] = []
     /// Frames that have told MediaWatch about their media, by the id each
     /// page's script picks, and which of them are playing sound.
     private var mediaFrames: [String: WKFrameInfo] = [:]
@@ -314,34 +316,23 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
         }
     }
 
-    /// A page wants to know where you are (navigator.geolocation). Without an
-    /// answer here macOS WebKit refuses every page. Public from macOS 27.
-    @available(macOS 27.0, *)
-    func webView(_ webView: WKWebView, requestGeolocationPermissionFor origin: WKSecurityOrigin,
-                 initiatedByFrame frame: WKFrameInfo,
-                 decisionHandler: @escaping @MainActor (WKPermissionDecision) -> Void) {
-        askForLocation(origin, decisionHandler)
-    }
-
-    /// The same, as WebKit's private delegate method before macOS 27.
-    @objc(_webView:requestGeolocationPermissionForOrigin:initiatedByFrame:decisionHandler:)
-    func webView(_ webView: WKWebView, requestGeolocationFor origin: WKSecurityOrigin,
-                 initiatedByFrame frame: WKFrameInfo,
-                 decisionHandler: @escaping (WKPermissionDecision) -> Void) {
-        askForLocation(origin, decisionHandler)
-    }
-
-    /// Asked once per site per Space, like the camera.
-    private func askForLocation(_ origin: WKSecurityOrigin, _ decisionHandler: @escaping (WKPermissionDecision) -> Void) {
-        let site = Self.site(origin)
+    /// A page wants to know where you are (PageLocation): asked once per site
+    /// per Space, like the camera. Asks that arrive while one is showing
+    /// share its answer.
+    func askForLocation(site: String, then: @escaping (Bool) -> Void) {
         let key = "\(site) location"
-        if permissions?.allowed.contains(key) == true { return decisionHandler(.grant) }
-        if refused.contains(key) { return decisionHandler(.deny) }
+        if permissions?.allowed.contains(key) == true { return then(true) }
+        if refused.contains(key) { return then(false) }
+        locationWaiters.append(then)
+        guard locationWaiters.count == 1 else { return }
         ask("Allow \(site) to use your location?",
             detail: Self.rememberNote,
             buttons: ["Allow", "Don't Allow"], defaultButton: 1) { [weak self] choice in
-            self?.remember(key, allowed: choice == 0)
-            decisionHandler(choice == 0 ? .grant : .deny)
+            guard let self else { return }
+            remember(key, allowed: choice == 0)
+            let waiters = locationWaiters
+            locationWaiters = []
+            waiters.forEach { $0(choice == 0) }
         }
     }
 
@@ -493,6 +484,7 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         // A fresh page (or a reload) may ask again about anything refused.
         forgetRefusals()
+        Locator.shared.forget(webView)
         // A new page: the old one's frames and sound are gone. Muting stays with the tab.
         mediaFrames = [:]
         audibleFrames = []

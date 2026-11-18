@@ -207,6 +207,7 @@ final class SpaceState: ObservableObject {
             }
             MediaWatch.install(in: config, for: self)
             PageNotifications.install(in: config, for: self)
+            PageLocation.install(in: config, for: self)
             installScripts(in: config.userContentController)
             return config
         }()
@@ -251,7 +252,7 @@ final class SpaceState: ObservableObject {
     }
 
     func closeAll() {
-        tabs.forEach { $0.webView.stopLoading() }
+        tabs.forEach { $0.webView.stopLoading(); Locator.shared.forget($0.webView) }
         tabs = []
         soundWatches = [:]
         mru = []
@@ -261,6 +262,7 @@ final class SpaceState: ObservableObject {
     func close(_ id: Tab.ID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         tabs[index].webView.stopLoading()
+        Locator.shared.forget(tabs[index].webView)
         tabs.remove(at: index)
         soundWatches[id] = nil
         mru.removeAll { $0 == id }
@@ -274,6 +276,7 @@ final class SpaceState: ObservableObject {
         controller.removeAllUserScripts()
         controller.addUserScript(MediaWatch.userScript)
         controller.addUserScript(PageNotifications.script(decisions: space.notifications ?? [:]))
+        controller.addUserScript(PageLocation.script)
     }
 
     /// Forgets everything a site has been allowed or refused in this Space,
