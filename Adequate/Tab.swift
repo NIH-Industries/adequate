@@ -38,6 +38,37 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     }
     /// True until something is loaded: only a blank tab starts in the address bar.
     var isBlank = true
+    /// Pinned: kept in the sidebar across restarts, and it comes back to this
+    /// address (not wherever you browsed to in it).
+    @Published var pinnedURL: URL?
+    /// The name the pin was saved with, shown while it's asleep.
+    var pinTitle = ""
+    /// A pinned tab whose page isn't loaded (after a restart, or ⌘W): it
+    /// loads when it's first shown, so pins cost nothing until used.
+    @Published private(set) var isAsleep = false
+    var isPinned: Bool { pinnedURL != nil }
+
+    /// Makes this unused tab a sleeping pin.
+    func fallAsleep(as pin: Pin) {
+        pinnedURL = URL(string: pin.url)
+        pinTitle = pin.title
+        title = pin.title
+        address = pin.url
+        isBlank = false
+        isAsleep = true
+    }
+
+    /// Shown for the first time: load the pinned page.
+    func wake() {
+        guard isAsleep, let pinnedURL else { return }
+        isAsleep = false
+        load(url: pinnedURL)
+    }
+
+    /// Back to the address this tab was pinned at.
+    func returnToPin() {
+        if let pinnedURL { load(url: pinnedURL) }
+    }
 
     /// Opens a page that asked for a new window as a tab in the same Space.
     /// It must use the given configuration so `window.opener` keeps working.

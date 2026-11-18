@@ -20,10 +20,18 @@ struct Space: Identifiable, Codable, Hashable {
     /// Logins, storage and history never touch the disk, so nothing else
     /// running as you can read them. Optional so older spaces.json loads.
     var throwaway: Bool?
+    /// Pinned tabs, which come back after a restart. A throwaway Space has none.
+    var pins: [Pin]?
 
     var isThrowaway: Bool { throwaway == true }
     var tint: Color { (color ?? .blue).color }
     var symbol: String { emoji ?? String(name.prefix(1)).uppercased() }
+}
+
+/// A tab kept in a Space's sidebar across restarts, at the address it was pinned at.
+struct Pin: Codable, Hashable {
+    var url: String
+    var title: String
 }
 
 /// The colour a Space wears, saved as one of the swatch names ("teal") or a
@@ -146,6 +154,7 @@ final class SpaceState: ObservableObject {
         self.space = space
         dataStore = Self.store(for: space)
         history = History(space: space.id, persistent: !space.isThrowaway)
+        tabs = (space.pins ?? []).map(sleepingTab)
     }
 
     private static func store(for space: Space) -> WKWebsiteDataStore {
@@ -264,6 +273,27 @@ final class SpaceState: ObservableObject {
     /// behind the current one.
     @discardableResult
     func newTab(configuration: WKWebViewConfiguration? = nil, background: Bool = false) -> Tab {
+        let tab = makeTab(configuration: configuration)
+        if background, let current = tabs.firstIndex(where: { $0.id == selectedTabID }) {
+            // Behind the current tab, but never in among the pins.
+            tabs.insert(tab, at: max(current + 1, pinnedTabs.count))
+            mru.insert(tab.id, at: min(1, mru.count))
+        } else {
+            tabs.append(tab)
+            selectedTabID = tab.id
+        }
+        return tab
+    }
+
+    /// A pinned tab, not loaded until it's shown.
+    private func sleepingTab(_ pin: Pin) -> Tab {
+        let tab = makeTab(configuration: nil)
+        tab.fallAsleep(as: pin)
+        return tab
+    }
+
+    /// A tab wired into this Space, not yet in the sidebar.
+    private func makeTab(configuration: WKWebViewConfiguration?) -> Tab {
         let config = configuration ?? {
             let config = WKWebViewConfiguration()
             config.websiteDataStore = dataStore
@@ -305,14 +335,62 @@ final class SpaceState: ObservableObject {
         }
         soundWatches[tab.id] = tab.$isPlayingAudio.removeDuplicates().dropFirst()
             .sink { [weak self] _ in self?.objectWillChange.send() }
-        if background, let current = tabs.firstIndex(where: { $0.id == selectedTabID }) {
-            tabs.insert(tab, at: current + 1)
-            mru.insert(tab.id, at: min(1, mru.count))
-        } else {
-            tabs.append(tab)
-            selectedTabID = tab.id
-        }
         return tab
+    }
+
+    var pinnedTabs: [Tab] { tabs.filter(\.isPinned) }
+    var unpinnedTabs: [Tab] { tabs.filter { !$0.isPinned } }
+
+    /// Keeps a tab in the sidebar across restarts, at the address it's on now.
+    func pin(_ id: Tab.ID) {
+        guard !space.isThrowaway, let index = tabs.firstIndex(where: { $0.id == id }), !tabs[index].isPinned,
+              let url = URL(string: tabs[index].address), ["http", "https", "file"].contains(url.scheme ?? "")
+        else { return }
+        let tab = tabs.remove(at: index)
+        tab.pinnedURL = url
+        tab.pinTitle = tab.displayTitle
+        tabs.insert(tab, at: pinnedTabs.count)
+        savePins()
+    }
+
+    /// Back to an ordinary tab, below the pins; a sleeping one just goes.
+    func unpin(_ id: Tab.ID) {
+        guard let index = tabs.firstIndex(where: { $0.id == id }), tabs[index].isPinned else { return }
+        let tab = tabs[index]
+        tab.pinnedURL = nil
+        if tab.isAsleep {
+            close(id)
+        } else {
+            tabs.remove(at: index)
+            tabs.insert(tab, at: pinnedTabs.count)
+        }
+        savePins()
+    }
+
+    /// Pins the page the tab is on now in place of the one it was pinned at.
+    func repin(_ id: Tab.ID) {
+        guard let tab = tabs.first(where: { $0.id == id }), tab.isPinned,
+              let url = URL(string: tab.address) else { return }
+        tab.pinnedURL = url
+        tab.pinTitle = tab.displayTitle
+        savePins()
+    }
+
+    private func savePins() {
+        let pins = pinnedTabs.compactMap { tab in
+            tab.pinnedURL.map { Pin(url: $0.absoluteString, title: tab.pinTitle) }
+        }
+        space.pins = pins.isEmpty ? nil : pins
+        persist?()
+    }
+
+    /// A pinned tab closing (⌘W, or popped out into a window) leaves a sleeping
+    /// copy in its place, so the pin stays until you unpin it.
+    private func leaveSleeper(at index: Int) {
+        let tab = tabs[index]
+        guard let url = tab.pinnedURL else { return }
+        tabs[index] = sleepingTab(Pin(url: url.absoluteString, title: tab.pinTitle))
+        tab.pinnedURL = nil
     }
 
     /// ⌘1..⌘8 pick a tab by position; ⌘9 always the last.
@@ -332,6 +410,10 @@ final class SpaceState: ObservableObject {
     func closeAll() {
         tabs.forEach { $0.shutDown() }
         tabs = []
+        if space.pins != nil {
+            space.pins = nil
+            persist?()
+        }
         soundWatches = [:]
         mru = []
         splitTabID = nil
@@ -342,7 +424,11 @@ final class SpaceState: ObservableObject {
     func close(_ id: Tab.ID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         tabs[index].shutDown()
-        tabs.remove(at: index)
+        if tabs[index].isPinned {
+            leaveSleeper(at: index)
+        } else {
+            tabs.remove(at: index)
+        }
         soundWatches[id] = nil
         mru.removeAll { $0 == id }
         left(id)
@@ -397,7 +483,12 @@ final class SpaceState: ObservableObject {
     /// Takes a tab out of the sidebar, still loaded, to live in a window of its own.
     func detach(_ id: Tab.ID) -> Tab? {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return nil }
-        let tab = tabs.remove(at: index)
+        let tab = tabs[index]
+        if tab.isPinned {
+            leaveSleeper(at: index)
+        } else {
+            tabs.remove(at: index)
+        }
         mru.removeAll { $0 == id }
         soundWatches[id] = nil
         left(id)
@@ -474,7 +565,8 @@ final class SpaceStore: ObservableObject {
     private var resignObserver: Any?
 
     init() {
-        var loaded = Self.load()
+        // Throwaway Spaces aren't saved, but an older spaces.json may have some.
+        var loaded = Self.load().filter { !$0.isThrowaway }
         if loaded.isEmpty {
             loaded = [Space(id: UUID(), name: "Home"), Space(id: UUID(), name: "Work")]
         }
@@ -503,7 +595,9 @@ final class SpaceStore: ObservableObject {
     private func save() {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(states.map(\.space)) else { return }
+        // A throwaway Space never touches the disk, not even its name: it's
+        // gone when Adequate quits.
+        guard let data = try? encoder.encode(states.map(\.space).filter { !$0.isThrowaway }) else { return }
         try? FileManager.default.createDirectory(at: Self.file.deletingLastPathComponent(),
                                                  withIntermediateDirectories: true)
         try? data.write(to: Self.file, options: .atomic)

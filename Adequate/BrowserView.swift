@@ -69,7 +69,23 @@ struct Sidebar: View {
             .padding(.bottom, 14)
 
             List(selection: Binding(get: { state.selectedTabID }, set: { state.choose($0) })) {
-                ForEach(state.tabs) { tab in
+                // Pins first, kept across restarts, then a line, then the rest.
+                ForEach(state.pinnedTabs) { row($0) }
+                if !state.pinnedTabs.isEmpty && !state.unpinnedTabs.isEmpty {
+                    Divider()
+                }
+                ForEach(state.unpinnedTabs) { row($0) }
+            }
+
+            Divider()
+            SpaceSwitcher(spaces: spaces)
+        }
+        // A wash of the Space's colour, so you can tell at a glance where you are.
+        .background(state.space.tint.opacity(0.12))
+        .tint(state.space.tint)
+    }
+
+    private func row(_ tab: Tab) -> some View {
                     TabRow(tab: tab,
                            inSplit: state.splitTabID == tab.id,
                            canSplit: state.selectedTabID != tab.id,
@@ -83,20 +99,14 @@ struct Sidebar: View {
                                state.split(dragged, onto: tab.id)
                                return true
                            },
+                           canPin: !state.space.isThrowaway,
+                           togglePin: { tab.isPinned ? state.unpin(tab.id) : state.pin(tab.id) },
+                           repin: { state.repin(tab.id) },
                            resetPermissions: { site in
                                state.resetPermissions(for: site)
                                spaces.show(toast: "\(site) can ask again")
                            })
                         .tag(tab.id)
-                }
-            }
-
-            Divider()
-            SpaceSwitcher(spaces: spaces)
-        }
-        // A wash of the Space's colour, so you can tell at a glance where you are.
-        .background(state.space.tint.opacity(0.12))
-        .tint(state.space.tint)
     }
 }
 
@@ -200,6 +210,11 @@ struct TabRow: View {
     let closeSplit: () -> Void
     /// Another tab (its id, as text) was dropped on this row.
     let dropTab: ([String]) -> Bool
+    /// Not in a throwaway Space, which doesn't outlive a quit.
+    let canPin: Bool
+    let togglePin: () -> Void
+    /// Pin the page it's on now instead.
+    let repin: () -> Void
     let resetPermissions: (String) -> Void
     @State private var hovering = false
     @State private var dropTargeted = false
@@ -216,6 +231,8 @@ struct TabRow: View {
             .frame(width: 16, height: 16)
             Text(tab.displayTitle).lineLimit(1)
                 .help(tab.address)
+                // A sleeping pin: not loaded until you go to it.
+                .foregroundStyle(tab.isAsleep ? .secondary : .primary)
             Spacer()
             if inSplit {
                 Image(systemName: "rectangle.righthalf.inset.filled")
@@ -254,6 +271,15 @@ struct TabRow: View {
                 // Undo a mistaken "Don't Allow" (or a "yes"): camera, microphone,
                 // notifications and opening apps, for this site in this Space.
                 Button("Reset Permissions for \(site)") { resetPermissions(site) }
+            }
+            Divider()
+            if canPin || tab.isPinned {
+                Button(tab.isPinned ? "Unpin Tab" : "Pin Tab", action: togglePin)
+                    .disabled(!tab.isPinned && !["http", "https", "file"].contains(URL(string: tab.address)?.scheme ?? ""))
+            }
+            if let pinned = tab.pinnedURL, !tab.isAsleep, tab.address != pinned.absoluteString {
+                Button("Back to Pinned Page", action: tab.returnToPin)
+                Button("Pin This Page Instead", action: repin)
             }
             Divider()
             if inSplit {
@@ -627,7 +653,9 @@ struct TabPage: View {
             }
             .onAppear {
                 draft = tab.address
-                // A blank tab wants an address; one opened with a page wants the page.
+                // A blank tab wants an address; one opened with a page wants
+                // the page. A sleeping pin loads now, on first sight.
+                tab.wake()
                 if tab.isBlank { edit() } else { tab.focusPage() }
             }
             .onChange(of: tab.address) { _, address in

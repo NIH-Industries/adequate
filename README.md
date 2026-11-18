@@ -7,13 +7,14 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
   Switch with the dots at the bottom of the sidebar; right-click one to
   edit (name, emoji, colour), reorder or delete it. Deleting a Space erases
   its site data.
-- **Throwaway Spaces**: tick Throwaway in the Space dialog and its logins,
-  site data and history live only in memory, forgotten when Adequate quits.
-  A kept Space's cookies are plain files any program running as you can read,
-  so keep the logins that matter most (work SSO, cloud consoles, banking) in
-  a throwaway one. Its dot has a dashed edge; right-click it › Forget
-  Everything to log out of everything now. Turning it on for an existing
-  Space erases what that Space had saved.
+- **Throwaway Spaces**: tick Throwaway in the Space dialog and nothing about
+  the Space touches the disk: its logins, site data and history live only in
+  memory, and the whole Space (name and all) is gone when Adequate quits. A
+  kept Space's cookies are plain files any program running as you can read,
+  so a throwaway Space suits a session you'd rather leave no trace of. Its dot
+  has a dashed edge; right-click it › Forget Everything to log out of
+  everything now. Turning it on for an existing Space erases what that Space
+  had saved. Tabs in it can't be pinned.
 - **`adequate` CLI**: `adequate open <space> <url>...` opens tabs in a Space,
   creating it if needed; `adequate spaces` lists them. Requests carry a
   per-user token, so web pages can't forge them.
@@ -59,7 +60,14 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
   Space's colour, and shortcuts, ⌘W and the site name act on it. Clicking
   another tab replaces the left pane; going to the right-hand tab any other
   way (⌃Tab, ⌘1–9) leaves the split.
-- **Fresh start**: tabs aren't kept between launches; Spaces and logins are.
+- **Pinned tabs**: right-click a tab › Pin Tab to keep it. Pins sit at the
+  top of the sidebar and come back after a restart, asleep (dimmed) until you
+  click one, so they cost nothing until used. A pin always comes back to the
+  address you pinned, wherever you browse in it (right-click › Back to Pinned
+  Page, or Pin This Page Instead). ⌘W puts a pin back to sleep rather than
+  closing it: Unpin Tab gets rid of it.
+- **Fresh start**: other tabs aren't kept between launches; pins, Spaces and
+  logins are.
 
 ## Keys
 
