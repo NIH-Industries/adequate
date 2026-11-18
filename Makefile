@@ -12,6 +12,7 @@ project:
 build: project cli
 	xcodebuild -project Adequate.xcodeproj -scheme Adequate -configuration Debug \
 	  -derivedDataPath tmp/DerivedData -quiet build
+	codesign --force --sign - --options runtime --entitlements Adequate/Adequate.entitlements $(BUILT)
 
 # Installs to ~/Applications, the one copy macOS should open links with.
 # The build in tmp/ is unregistered so links never go to it.

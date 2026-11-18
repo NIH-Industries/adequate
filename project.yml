@@ -11,12 +11,28 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_IDENTITY: "-"
     CODE_SIGN_STYLE: Manual
-    ENABLE_HARDENED_RUNTIME: NO
+    # Blocks code injection into a running Adequate (it holds logins and a
+    # 1Password session). Works with ad-hoc signing. Anything that needs a
+    # protected resource needs its entitlement below, or it's silently refused.
+    ENABLE_HARDENED_RUNTIME: YES
+    # Xcode leaves the runtime off when ad-hoc signing, so the Makefile signs
+    # the app again with it. One binary (no separate debug dylib, which only
+    # SwiftUI previews want), and no get-task-allow, which would let any
+    # program running as you attach a debugger.
+    ENABLE_DEBUG_DYLIB: NO
+    CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
 targets:
   Adequate:
     type: application
     platform: macOS
     sources: [Adequate]
+    entitlements:
+      path: Adequate/Adequate.entitlements
+      properties:
+        # Video calls (getUserMedia) and maps (PageLocation).
+        com.apple.security.device.camera: true
+        com.apple.security.device.audio-input: true
+        com.apple.security.personal-information.location: true
     info:
       path: Adequate/Info.plist
       properties:

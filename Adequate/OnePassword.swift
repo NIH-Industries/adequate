@@ -117,9 +117,15 @@ enum OnePassword {
         }
     }
 
+    /// Only the three fields a fill needs, not the whole item (notes, security
+    /// answers, other passwords). op won't select by label and type at once,
+    /// so the one-time code is its own request; an item without one fails it.
     static func secrets(for login: Login) async throws -> Secrets {
-        let data = try await run(["item", "get", login.id, "--format", "json", "--reveal", "--account", login.account])
-        let fields = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["fields"] as? [[String: Any]] ?? []
+        let item = ["item", "get", login.id, "--account", login.account, "--format", "json"]
+        async let credentials = run(item + ["--fields", "username,password", "--reveal"])
+        async let code = try? run(item + ["--fields", "type=otp"])
+        var fields = try fieldList(await credentials)
+        if let code = await code { fields += (try? fieldList(code)) ?? [] }
         var secrets = Secrets()
         for field in fields {
             let value = field["value"] as? String ?? ""
@@ -131,6 +137,12 @@ enum OnePassword {
             }
         }
         return secrets
+    }
+
+    /// op gives one field as an object, several as a list.
+    private static func fieldList(_ data: Data) throws -> [[String: Any]] {
+        let json = try JSONSerialization.jsonObject(with: data)
+        return json as? [[String: Any]] ?? (json as? [String: Any]).map { [$0] } ?? []
     }
 
     /// The same site, or a subdomain of the saved one (a login saved for
@@ -162,6 +174,10 @@ enum OnePassword {
         guard let tool else {
             throw Failure(message: "Install the 1Password CLI (brew install 1password-cli) to fill logins.")
         }
+        // Homebrew's folder is yours to write to: make sure it's 1Password's op.
+        guard isGenuine(tool) else {
+            throw Failure(message: "Not running \(tool.path): it isn't signed by 1Password")
+        }
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
@@ -176,6 +192,19 @@ enum OnePassword {
                 }
             }
         }
+    }
+
+    /// Signed by 1Password's team, intact. (It could still be swapped between
+    /// this check and the launch; the 1Password app checks op too.)
+    private nonisolated static func isGenuine(_ tool: URL) -> Bool {
+        var code: SecStaticCode?
+        var requirement: SecRequirement?
+        guard SecStaticCodeCreateWithPath(tool as CFURL, [], &code) == errSecSuccess, let code,
+              SecRequirementCreateWithString(
+                  "anchor apple generic and certificate leaf[subject.OU] = \"2BUA8C4S2C\"" as CFString,
+                  [], &requirement) == errSecSuccess
+        else { return false }
+        return SecStaticCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSCheckAllArchitectures | kSecCSStrictValidate), requirement) == errSecSuccess
     }
 
     /// Runs op as its own responsible process, as a terminal does. Started
@@ -370,12 +399,16 @@ private final class MenuChoice: NSObject {
 }
 
 enum Clipboard {
-    /// Copies a one-time code, and clears it a minute later if it's still there.
+    /// Copies a one-time code, and clears it a minute later if it's still
+    /// there. Marked concealed and transient, which clipboard managers
+    /// (nspasteboard.org) skip, and kept off Universal Clipboard.
     @MainActor
     static func copySecret(_ text: String) {
         let board = NSPasteboard.general
-        board.clearContents()
+        board.prepareForNewContents(with: .currentHostOnly)
         board.setString(text, forType: .string)
+        board.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
+        board.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
         let count = board.changeCount
         Task {
             try? await Task.sleep(for: .seconds(60))
