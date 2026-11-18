@@ -2,7 +2,7 @@
 
 # Adequate
 
-## Todo (8)
+## Todo (9)
 
 - [Route links from other apps to the right Space](route-links-from-other-apps-to-the-right-space.toml) — priority: low · tags: `idea`, `links`
 - [Upload files from pages](upload-files-from-pages.toml) — priority: high · tags: `idea`, `pages`, `basics`
@@ -12,6 +12,7 @@
 - [Reopen closed tabs](reopen-closed-tabs.toml) — priority: medium · tags: `idea`, `tabs`
 - [Print pages and save them as PDF](print-pages-and-save-them-as-pdf.toml) — priority: low · tags: `idea`, `pages`
 - [Ask before leaving a page with unsaved changes](ask-before-leaving-a-page-with-unsaved-changes.toml) — priority: medium · tags: `idea`, `pages`
+- [Keep 1Password fill working under the App Sandbox](keep-1password-fill-working-under-the-app-sandbox.toml) — priority: medium · tags: `idea`, `security`, `auth`
 
 ## In Progress (0)
 
