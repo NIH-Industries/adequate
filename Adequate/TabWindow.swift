@@ -37,8 +37,7 @@ final class TabWindow: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        tab.webView.stopLoading()
-        tab.pauseMedia()
+        tab.shutDown()
         onClose?()
     }
 }

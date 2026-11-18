@@ -330,7 +330,7 @@ final class SpaceState: ObservableObject {
     }
 
     func closeAll() {
-        tabs.forEach { $0.webView.stopLoading(); Locator.shared.forget($0.webView) }
+        tabs.forEach { $0.shutDown() }
         tabs = []
         soundWatches = [:]
         mru = []
@@ -341,8 +341,7 @@ final class SpaceState: ObservableObject {
 
     func close(_ id: Tab.ID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-        tabs[index].webView.stopLoading()
-        Locator.shared.forget(tabs[index].webView)
+        tabs[index].shutDown()
         tabs.remove(at: index)
         soundWatches[id] = nil
         mru.removeAll { $0 == id }

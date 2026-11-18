@@ -270,6 +270,26 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
         webView.pauseAllMediaPlayback {}
     }
 
+    /// The tab is closing: end its page now. Dropping the tab isn't enough,
+    /// because a page keeps running (and playing) for as long as anything
+    /// still holds its web view, on screen or not, and SwiftUI can hang on
+    /// to a closed tab's views for a while.
+    func shutDown() {
+        webView.stopLoading()
+        Locator.shared.forget(webView)
+        webView.pauseAllMediaPlayback {}
+        isPlayingAudio = false
+        // WebKit's private close, as Safari does: the page and its scripts,
+        // timers, media and Web Audio end at once. If it goes, a blank page
+        // does nearly the same.
+        let close = Selector(("_close"))
+        if webView.responds(to: close) {
+            webView.perform(close)
+        } else {
+            webView.loadHTMLString("", baseURL: nil)
+        }
+    }
+
     func goForward() { webView.goForward() }
     func zoom(by step: CGFloat?) {
         webView.pageZoom = step.map { min(max(webView.pageZoom + $0, 0.3), 3) } ?? 1
