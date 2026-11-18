@@ -314,6 +314,37 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
         }
     }
 
+    /// A page wants to know where you are (navigator.geolocation). Without an
+    /// answer here macOS WebKit refuses every page. Public from macOS 27.
+    @available(macOS 27.0, *)
+    func webView(_ webView: WKWebView, requestGeolocationPermissionFor origin: WKSecurityOrigin,
+                 initiatedByFrame frame: WKFrameInfo,
+                 decisionHandler: @escaping @MainActor (WKPermissionDecision) -> Void) {
+        askForLocation(origin, decisionHandler)
+    }
+
+    /// The same, as WebKit's private delegate method before macOS 27.
+    @objc(_webView:requestGeolocationPermissionForOrigin:initiatedByFrame:decisionHandler:)
+    func webView(_ webView: WKWebView, requestGeolocationFor origin: WKSecurityOrigin,
+                 initiatedByFrame frame: WKFrameInfo,
+                 decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        askForLocation(origin, decisionHandler)
+    }
+
+    /// Asked once per site per Space, like the camera.
+    private func askForLocation(_ origin: WKSecurityOrigin, _ decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        let site = Self.site(origin)
+        let key = "\(site) location"
+        if permissions?.allowed.contains(key) == true { return decisionHandler(.grant) }
+        if refused.contains(key) { return decisionHandler(.deny) }
+        ask("Allow \(site) to use your location?",
+            detail: Self.rememberNote,
+            buttons: ["Allow", "Don't Allow"], defaultButton: 1) { [weak self] choice in
+            self?.remember(key, allowed: choice == 0)
+            decisionHandler(choice == 0 ? .grant : .deny)
+        }
+    }
+
     /// A page asked to show notifications.
     func askToNotify(site: String, then: @escaping (Bool) -> Void) {
         ask("Allow \(site) to show notifications?",

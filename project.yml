@@ -25,6 +25,8 @@ targets:
         NSHumanReadableCopyright: "NIH Industries"
         NSCameraUsageDescription: "Web pages you allow, like video calls, can use your camera."
         NSMicrophoneUsageDescription: "Web pages you allow, like video calls, can use your microphone."
+        NSLocationUsageDescription: "Web pages you allow, like maps, can use your location."
+        NSLocationWhenInUseUsageDescription: "Web pages you allow, like maps, can use your location."
         CFBundleURLTypes:
           - CFBundleURLName: com.nih-industries.adequate
             CFBundleURLSchemes: [adequate]
