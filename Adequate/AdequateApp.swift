@@ -58,6 +58,8 @@ struct AdequateCommands: Commands {
             Button("Go to Tab Playing Sound") { spaces.showPlayingTab() }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
             Button("Pause All Media") { spaces.pauseAllMedia() }
+            Button("Show Downloads in Finder") { Downloads.shared.showFolder() }
+                .keyboardShortcut("l", modifiers: [.command, .option])
             Button("Open Tab in New Window") {
                 if let id = spaces.current.activeTab?.id { spaces.openInNewWindow(id, from: spaces.current) }
             }
@@ -92,6 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = CLIToken.value  // make sure the CLI has a token to read
         Notifier.shared.reveal = { [weak self] id in self?.spaces.reveal(id) }
         Notifier.shared.start()
+        Downloads.shared.onStart = { [weak self] name in self?.spaces.show(toast: "Downloading \(name)") }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

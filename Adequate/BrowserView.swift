@@ -77,6 +77,7 @@ struct Sidebar: View {
                 ForEach(state.unpinnedTabs) { row($0) }
             }
 
+            DownloadsList(downloads: .shared)
             Divider()
             SpaceSwitcher(spaces: spaces)
         }
@@ -133,6 +134,102 @@ struct SpaceMenuItems: View {
 }
 
 /// One dot per Space along the bottom of the sidebar, like Arc's.
+/// This run's downloads, at the foot of the sidebar while there are any.
+struct DownloadsList: View {
+    @ObservedObject var downloads: Downloads
+    /// Beyond this many, only the newest show: the rest are in the folder.
+    private let shown = 4
+
+    var body: some View {
+        if !downloads.items.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                Divider()
+                HStack {
+                    Text("Downloads").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Clear", action: downloads.clear)
+                        .buttonStyle(.borderless).font(.caption)
+                        .disabled(downloads.items.allSatisfy { $0.state == .running })
+                    Button(action: downloads.showFolder) { Image(systemName: "folder") }
+                        .buttonStyle(.borderless)
+                        .help("Show Downloads in Finder (⌥⌘L)")
+                }
+                .padding(.top, 6)
+                ForEach(downloads.items.prefix(shown)) { DownloadRow(item: $0) }
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 4)
+        }
+    }
+}
+
+struct DownloadRow: View {
+    @ObservedObject var item: Download
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Group {
+                if let file = item.file, item.state == .finished {
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: file.path)).resizable()
+                } else {
+                    Image(systemName: "arrow.down.circle").foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 16, height: 16)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name).lineLimit(1).truncationMode(.middle)
+                    .foregroundStyle(item.state == .finished ? .primary : .secondary)
+                switch item.state {
+                case .running:
+                    ProgressView(value: item.fraction ?? 0).progressViewStyle(.linear).controlSize(.mini)
+                        .opacity(item.fraction == nil ? 0.4 : 1)
+                case .failed(let reason):
+                    Text("Failed: \(reason)").font(.caption2).foregroundStyle(.red).lineLimit(1)
+                case .cancelled:
+                    Text("Cancelled").font(.caption2).foregroundStyle(.secondary)
+                case .finished:
+                    EmptyView()
+                }
+            }
+            Spacer(minLength: 0)
+            if hovering {
+                if item.state == .running {
+                    Button(action: item.cancel) { Image(systemName: "xmark.circle") }
+                        .buttonStyle(.borderless).help("Cancel Download")
+                } else if item.state == .finished {
+                    Button(action: item.reveal) { Image(systemName: "magnifyingglass") }
+                        .buttonStyle(.borderless).help("Show in Finder")
+                }
+            }
+        }
+        .padding(.vertical, 3)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .help(item.file?.path ?? item.name)
+        // Opening one is your click, never the page's.
+        .onTapGesture(count: 2, perform: item.open)
+        .onDrag {
+            guard item.state == .finished, let file = item.file else { return NSItemProvider() }
+            return NSItemProvider(contentsOf: file) ?? NSItemProvider()
+        }
+        .contextMenu {
+            Button("Open", action: item.open).disabled(item.state != .finished)
+            Button("Show in Finder", action: item.reveal).disabled(item.file == nil || item.state == .running)
+            Button("Copy Address") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(item.download.originalRequest?.url?.absoluteString ?? "", forType: .string)
+            }
+            .disabled(item.download.originalRequest?.url == nil)
+            Divider()
+            if item.state == .running {
+                Button("Cancel Download", action: item.cancel)
+            }
+            Button("Remove from List") { Downloads.shared.remove(item) }
+        }
+    }
+}
+
 struct SpaceSwitcher: View {
     @ObservedObject var spaces: SpaceStore
 

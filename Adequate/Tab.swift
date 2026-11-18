@@ -80,6 +80,10 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     var permissions: SitePermissions?
     /// The Space's history, which pages loaded here add to.
     var history: History?
+    /// In a throwaway Space: its downloads don't record where they came from.
+    var isThrowaway = false
+    /// A pop-up or target=_blank link opened this tab, not you.
+    var openedByPage = false
     /// The page loading now was asked for in the address bar.
     private var typedLoad = false
     private var observations: [NSKeyValueObservation] = []
@@ -511,6 +515,35 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
         "\(site(frame.securityOrigin)) says"
     }
 
+    /// A page's file field (or a script clicking one): pick what to upload.
+    /// Only what you pick goes to the page, and only for that field.
+    func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
+                 initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping @MainActor ([URL]?) -> Void) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = parameters.allowsDirectories
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.resolvesAliases = true
+        panel.message = "Choose \(parameters.allowsMultipleSelection ? "files" : "a file") to send to \(Self.site(frame.securityOrigin))"
+        panel.prompt = "Upload"
+        let finish = { (response: NSApplication.ModalResponse) in
+            completionHandler(response == .OK ? panel.urls : nil)
+        }
+        if let window = webView.window {
+            panel.beginSheetModal(for: window, completionHandler: finish)
+        } else {
+            finish(panel.runModal())
+        }
+    }
+
+    /// The context menu's Download Linked File / Download Image. WebKit's
+    /// private delegate method: without it those downloads go nowhere.
+    @objc(_webView:contextMenuDidCreateDownload:)
+    func webView(_ webView: WKWebView, contextMenuDidCreate download: WKDownload) {
+        startDownload(download)
+    }
+
     func webViewDidClose(_ webView: WKWebView) {
         // window.close() from a pop-up, e.g. at the end of an OAuth sign-in.
         onClose?()
@@ -526,12 +559,45 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
             openInOtherApp(url, scheme: scheme)
             return decisionHandler(.cancel)
         }
+        // <a download>: save it, even if WebKit could show it.
+        if navigationAction.shouldPerformDownload { return decisionHandler(.download) }
         if navigationAction.navigationType == .linkActivated,
            navigationAction.modifierFlags.contains(.command) {
             onOpenInBackground?(url)
             return decisionHandler(.cancel)
         }
         decisionHandler(.allow)
+    }
+
+    /// What WebKit can't show (a zip, a dmg), or what the server says to
+    /// save (Content-Disposition: attachment), is downloaded instead.
+    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
+                 decisionHandler: @escaping @MainActor (WKNavigationResponsePolicy) -> Void) {
+        let disposition = (navigationResponse.response as? HTTPURLResponse)?
+            .value(forHTTPHeaderField: "Content-Disposition")?.lowercased() ?? ""
+        let attachment = disposition.trimmingCharacters(in: .whitespaces).hasPrefix("attachment")
+        if !navigationResponse.canShowMIMEType || (navigationResponse.isForMainFrame && attachment) {
+            return decisionHandler(.download)
+        }
+        decisionHandler(.allow)
+    }
+
+    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+        startDownload(download)
+    }
+
+    func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
+        startDownload(download)
+    }
+
+    private func startDownload(_ download: WKDownload) {
+        let page = webView.url.flatMap { ["http", "https"].contains($0.scheme ?? "") ? $0 : nil }
+        Downloads.shared.track(download, from: page, throwaway: isThrowaway)
+        // A link that opened a new tab just to download (target=_blank):
+        // nothing's left to show in it, so it goes.
+        if openedByPage, webView.backForwardList.currentItem == nil {
+            DispatchQueue.main.async { [weak self] in self?.onClose?() }
+        }
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {

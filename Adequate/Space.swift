@@ -322,8 +322,12 @@ final class SpaceState: ObservableObject {
         let tab = Tab(configuration: config)
         tab.permissions = permissions
         tab.history = history
+        tab.isThrowaway = space.isThrowaway
         // A pop-up or target=_blank link: WebKit loads its page into this tab.
-        if configuration != nil { tab.isBlank = false }
+        if configuration != nil {
+            tab.isBlank = false
+            tab.openedByPage = true
+        }
         tab.onOpenTab = { [weak self] configuration in
             self?.newTab(configuration: configuration).webView
         }

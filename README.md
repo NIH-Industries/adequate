@@ -55,6 +55,18 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
 - **Local files**: an html file can read the files in its own folder (so a
   report's images load), unless that folder is a catch-all one like
   Downloads, Desktop or your home folder: then it can only read itself.
+- **Uploads**: a page's file button opens the usual Open panel, as a sheet
+  that names the site asking; only what you pick goes to it. Dragging files
+  onto a page works too.
+- **Downloads**: what a page can't show (zips, disk images), or is told to
+  save, goes to ~/Downloads, never written over (`report 2.pdf`) and never
+  opened by itself. Right-click a link or image › Download Linked File works
+  too. They're listed at the foot of the sidebar with their progress: hover
+  one to cancel it or show it in Finder, double-click to open it, drag it out,
+  or right-click for the rest. Files are quarantined like Safari's, so an app
+  or script in one still gets Gatekeeper's checks. A throwaway Space's
+  downloads are kept (you asked for them) but their quarantine record leaves
+  out where they came from. The list is only for this run.
 - **Split view**: two tabs side by side (⌘\\, or drag one tab onto another,
   or right-click › Open in Split View). Click a pane to use it: it gets the
   Space's colour, and shortcuts, ⌘W and the site name act on it. Clicking
@@ -89,6 +101,7 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
 | ⌃1–⌃9 | Space by position |
 | ⌘⇧N | new Space |
 | ⌘⇧A | next tab playing sound, in any Space |
+| ⌥⌘L | show Downloads in Finder |
 | ⌘= / ⌘- / ⌘0 | zoom in / out / actual size |
 | ⌘-click a link | open it in a background tab |
 | ⌘\\ | split view: a new tab beside this one, or back to one pane |
