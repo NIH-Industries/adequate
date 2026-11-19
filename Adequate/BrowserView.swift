@@ -147,11 +147,14 @@ struct Sidebar: View {
                            popOut: { spaces.openInNewWindow(tab.id, from: state) },
                            openSplit: { state.openSplit(with: tab.id) },
                            closeSplit: state.closeSplit,
-                           dropTab: { items in
-                               // Another tab dragged onto this one: show the two side by side.
-                               guard let text = items.first, let dragged = UUID(uuidString: text) else { return false }
-                               state.split(dragged, onto: tab.id)
-                               return true
+                           dropTab: { dragged, zone in
+                               switch zone {
+                               // Onto the middle of this one: show the two side by side.
+                               case .onto: state.split(dragged, onto: tab.id)
+                               // Its top or bottom edge: move it there.
+                               case .before: state.moveTab(dragged, beside: tab.id, after: false)
+                               case .after: state.moveTab(dragged, beside: tab.id, after: true)
+                               }
                            },
                            canPin: !state.space.isThrowaway,
                            togglePin: { tab.isPinned ? state.unpin(tab.id) : state.pin(tab.id) },
@@ -434,8 +437,8 @@ struct TabRow: View {
     let popOut: () -> Void
     let openSplit: () -> Void
     let closeSplit: () -> Void
-    /// Another tab (its id, as text) was dropped on this row.
-    let dropTab: ([String]) -> Bool
+    /// Another tab was dropped on this row: on its middle, or an edge.
+    let dropTab: (Tab.ID, TabDropZone) -> Void
     /// Not in a throwaway Space, which doesn't outlive a quit.
     let canPin: Bool
     let togglePin: () -> Void
@@ -449,7 +452,8 @@ struct TabRow: View {
     let newFolder: () -> Void
     let resetPermissions: (String) -> Void
     @State private var hovering = false
-    @State private var dropTargeted = false
+    @State private var dropZone: TabDropZone?
+    @State private var rowHeight: CGFloat = 30
 
     var body: some View {
         HStack(spacing: 8) {
@@ -499,10 +503,21 @@ struct TabRow: View {
         .padding(.vertical, 5)
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
-        // Drag this tab onto another to open them in a split view.
+        // Drag this tab onto another's middle to open them in a split view,
+        // or to its top or bottom edge to move it there.
         .draggable(tab.id.uuidString)
-        .dropDestination(for: String.self) { items, _ in dropTab(items) } isTargeted: { dropTargeted = $0 }
-        .background(RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(dropTargeted ? 0.3 : 0)))
+        .background(GeometryReader { geometry in
+            Color.clear.onAppear { rowHeight = geometry.size.height }
+                .onChange(of: geometry.size.height) { _, height in rowHeight = height }
+        })
+        .onDrop(of: [.text], delegate: TabDropDelegate(height: rowHeight, zone: $dropZone) { dropTab($0, $1) })
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(dropZone == .onto ? 0.3 : 0)))
+        .overlay(alignment: dropZone == .after ? .bottom : .top) {
+            if dropZone == .before || dropZone == .after {
+                Capsule().fill(Color.accentColor).frame(height: 2).offset(y: dropZone == .after ? 1 : -1)
+                    .allowsHitTesting(false)
+            }
+        }
         .contextMenu {
             Button("Copy Link") {
                 NSPasteboard.general.clearContents()
@@ -548,6 +563,44 @@ struct TabRow: View {
             Button("Open in New Window", action: popOut)
             Button("Close Tab", action: close)
         }
+    }
+}
+
+/// Where on a tab's row another tab is being dropped.
+enum TabDropZone {
+    case before, onto, after
+}
+
+/// Tells a row which part of it a dragged tab is over: the top and bottom
+/// thirds move the tab there, the middle opens the two in a split view.
+struct TabDropDelegate: DropDelegate {
+    let height: CGFloat
+    @Binding var zone: TabDropZone?
+    let drop: (Tab.ID, TabDropZone) -> Void
+
+    private func zone(for info: DropInfo) -> TabDropZone {
+        let y = info.location.y
+        return y < height / 3 ? .before : y > height * 2 / 3 ? .after : .onto
+    }
+
+    func validateDrop(info: DropInfo) -> Bool { info.hasItemsConforming(to: [.text]) }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        zone = zone(for: info)
+        return DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) { zone = nil }
+
+    func performDrop(info: DropInfo) -> Bool {
+        let dropped = zone(for: info)
+        zone = nil
+        guard let provider = info.itemProviders(for: [.text]).first else { return false }
+        _ = provider.loadObject(ofClass: NSString.self) { object, _ in
+            guard let text = object as? String, let id = UUID(uuidString: text) else { return }
+            DispatchQueue.main.async { drop(id, dropped) }
+        }
+        return true
     }
 }
 

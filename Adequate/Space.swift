@@ -446,6 +446,28 @@ final class SpaceState: ObservableObject {
         savePins()
     }
 
+    /// Drags a tab to just above or below another in the sidebar. It joins
+    /// that tab's group: among the pins or in a folder it's pinned (if it can
+    /// be), among ordinary tabs it's unpinned (a sleeping pin wakes, rather
+    /// than going as Unpin would make it).
+    func moveTab(_ id: Tab.ID, beside target: Tab.ID, after: Bool) {
+        guard id != target, let tab = tabs.first(where: { $0.id == id }),
+              let targetTab = tabs.first(where: { $0.id == target }) else { return }
+        if targetTab.isPinned {
+            if !tab.isPinned { pin(id) }
+            guard tab.isPinned else { return }  // nothing to pin, like a blank tab
+            folderOf[id] = folderOf[target]
+        } else if tab.isPinned {
+            tab.wake()
+            unpin(id)
+        }
+        guard let from = tabs.firstIndex(where: { $0.id == id }) else { return }
+        tabs.remove(at: from)
+        guard let to = tabs.firstIndex(where: { $0.id == target }) else { return }
+        tabs.insert(tab, at: after ? to + 1 : to)
+        savePins()
+    }
+
     /// Back to an ordinary tab, below the pins; a sleeping one just goes.
     func unpin(_ id: Tab.ID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }), tabs[index].isPinned else { return }

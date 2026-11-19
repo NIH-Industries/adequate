@@ -72,7 +72,7 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
   or script in one still gets Gatekeeper's checks. A throwaway Space's
   downloads are kept (you asked for them) but their quarantine record leaves
   out where they came from. The list is only for this run.
-- **Split view**: two tabs side by side (⌘\\, or drag one tab onto another,
+- **Split view**: two tabs side by side (⌘\\, or drag one tab onto the middle of another,
   or right-click › Open in Split View). Click a pane to use it: it gets the
   Space's colour, and shortcuts, ⌘W and the site name act on it. Clicking
   another tab replaces the left pane; going to the right-hand tab any other
@@ -90,6 +90,9 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
   folder to open or close it; right-click to rename or remove it (its tabs stay
   as ordinary pins). Not in throwaway Spaces. ⌘1–9 and ⌘⇧[ / ⌘⇧] go by the
   tabs as the sidebar shows them, skipping those in closed folders.
+- **Reordering**: drag a tab to the top or bottom edge of another (a line
+  shows where it'll go). Among the pins or in a folder it's pinned; among
+  ordinary tabs it's unpinned. Pins keep their order after a restart.
 - **Fresh start**: other tabs aren't kept between launches; pins, Spaces and
   logins are.
 
