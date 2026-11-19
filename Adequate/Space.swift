@@ -22,6 +22,8 @@ struct Space: Identifiable, Codable, Hashable {
     var throwaway: Bool?
     /// Pinned tabs, which come back after a restart. A throwaway Space has none.
     var pins: [Pin]?
+    /// Sidebar folders, which hold pinned tabs (each pin says which folder it's in).
+    var folders: [Folder]?
 
     var isThrowaway: Bool { throwaway == true }
     var tint: Color { (color ?? .blue).color }
@@ -32,6 +34,19 @@ struct Space: Identifiable, Codable, Hashable {
 struct Pin: Codable, Hashable {
     var url: String
     var title: String
+    /// The folder it's kept in, if any. Optional so older spaces.json loads.
+    var folder: UUID?
+}
+
+/// A named, collapsible group in a Space's sidebar. Its tabs are pinned tabs,
+/// so they and the folder come back after a restart.
+struct Folder: Identifiable, Codable, Hashable {
+    let id: UUID
+    var name: String
+    /// Optional so older spaces.json loads; folders start open.
+    var expanded: Bool?
+
+    var isOpen: Bool { expanded ?? true }
 }
 
 /// The colour a Space wears, saved as one of the swatch names ("teal") or a
@@ -150,11 +165,19 @@ final class SpaceState: ObservableObject {
 
     var audibleTabs: [Tab] { tabs.filter(\.isPlayingAudio) }
 
+    /// Which folder each tab in one is kept in. Only pinned tabs are in folders.
+    @Published private(set) var folderOf: [Tab.ID: Folder.ID] = [:]
+
     init(space: Space) {
         self.space = space
         dataStore = Self.store(for: space)
         history = History(space: space.id, persistent: !space.isThrowaway)
         tabs = (space.pins ?? []).map(sleepingTab)
+        for (tab, pin) in zip(tabs, space.pins ?? []) {
+            if let folder = pin.folder, space.folders?.contains(where: { $0.id == folder }) == true {
+                folderOf[tab.id] = folder
+            }
+        }
     }
 
     private static func store(for space: Space) -> WKWebsiteDataStore {
@@ -344,6 +367,60 @@ final class SpaceState: ObservableObject {
 
     var pinnedTabs: [Tab] { tabs.filter(\.isPinned) }
     var unpinnedTabs: [Tab] { tabs.filter { !$0.isPinned } }
+    /// Pinned tabs that aren't in a folder.
+    var looseTabs: [Tab] { tabs.filter { $0.isPinned && folderOf[$0.id] == nil } }
+    var folders: [Folder] { space.folders ?? [] }
+
+    func tabs(in folder: Folder.ID) -> [Tab] { tabs.filter { folderOf[$0.id] == folder } }
+
+    /// Makes a folder, and puts a tab in it if one is given (pinning it).
+    @discardableResult
+    func addFolder(named name: String, moving tab: Tab.ID? = nil) -> Folder.ID? {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !space.isThrowaway, !name.isEmpty else { return nil }
+        let folder = Folder(id: UUID(), name: name, expanded: true)
+        space.folders = folders + [folder]
+        if let tab { move(tab, toFolder: folder.id) } else { persist?() }
+        return folder.id
+    }
+
+    func renameFolder(_ id: Folder.ID, to name: String) {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, let index = folders.firstIndex(where: { $0.id == id }) else { return }
+        space.folders?[index].name = name
+        persist?()
+    }
+
+    func toggleFolder(_ id: Folder.ID) {
+        guard let index = folders.firstIndex(where: { $0.id == id }) else { return }
+        space.folders?[index].expanded = !folders[index].isOpen
+        persist?()
+    }
+
+    /// Takes the folder away. Its tabs stay, as ordinary pins.
+    func removeFolder(_ id: Folder.ID) {
+        for tab in tabs(in: id) { folderOf[tab.id] = nil }
+        space.folders = folders.filter { $0.id != id }
+        if space.folders?.isEmpty == true { space.folders = nil }
+        savePins()
+    }
+
+    /// Puts a tab in a folder (pinning it first, since folders keep saved
+    /// links), or, with nil, takes it out again.
+    func move(_ id: Tab.ID, toFolder folder: Folder.ID?) {
+        guard !space.isThrowaway, tabs.contains(where: { $0.id == id }) else { return }
+        if let folder {
+            guard folders.contains(where: { $0.id == folder }) else { return }
+            if tabs.first(where: { $0.id == id })?.isPinned == false { pin(id) }
+            // A page with no address to keep (a blank tab) can't be pinned.
+            guard tabs.first(where: { $0.id == id })?.isPinned == true else { return }
+            folderOf[id] = folder
+            if let index = folders.firstIndex(where: { $0.id == folder }) { space.folders?[index].expanded = true }
+        } else {
+            folderOf[id] = nil
+        }
+        savePins()
+    }
 
     /// Keeps a tab in the sidebar across restarts, at the address it's on now.
     func pin(_ id: Tab.ID) {
@@ -362,6 +439,7 @@ final class SpaceState: ObservableObject {
         guard let index = tabs.firstIndex(where: { $0.id == id }), tabs[index].isPinned else { return }
         let tab = tabs[index]
         tab.pinnedURL = nil
+        folderOf[id] = nil
         if tab.isAsleep {
             close(id)
         } else {
@@ -382,7 +460,7 @@ final class SpaceState: ObservableObject {
 
     private func savePins() {
         let pins = pinnedTabs.compactMap { tab in
-            tab.pinnedURL.map { Pin(url: $0.absoluteString, title: tab.pinTitle) }
+            tab.pinnedURL.map { Pin(url: $0.absoluteString, title: tab.pinTitle, folder: folderOf[tab.id]) }
         }
         space.pins = pins.isEmpty ? nil : pins
         persist?()
@@ -393,8 +471,11 @@ final class SpaceState: ObservableObject {
     private func leaveSleeper(at index: Int) {
         let tab = tabs[index]
         guard let url = tab.pinnedURL else { return }
-        tabs[index] = sleepingTab(Pin(url: url.absoluteString, title: tab.pinTitle))
+        let sleeper = sleepingTab(Pin(url: url.absoluteString, title: tab.pinTitle))
+        tabs[index] = sleeper
         tab.pinnedURL = nil
+        // The sleeping copy keeps the folder.
+        if let folder = folderOf.removeValue(forKey: tab.id) { folderOf[sleeper.id] = folder }
     }
 
     /// ⌘1..⌘8 pick a tab by position; ⌘9 always the last.
@@ -414,6 +495,7 @@ final class SpaceState: ObservableObject {
     func closeAll() {
         tabs.forEach { $0.shutDown() }
         tabs = []
+        folderOf = [:]
         if space.pins != nil {
             space.pins = nil
             persist?()
@@ -559,6 +641,9 @@ final class SpaceStore: ObservableObject {
     @Published var sidebarShown = true
     /// A brief message at the bottom of the window, like "Copied link".
     @Published var toast: String?
+    /// While two fingers swipe the sidebar: the Space it's heading for, and how
+    /// far along the swipe is (1 switches).
+    @Published var swipePreview: SwipePreview?
     private var toastTask: Task<Void, Never>?
     /// Brings the main window back, set once the window has appeared.
     var showWindow: (() -> Void)?
@@ -900,17 +985,31 @@ final class SpaceStore: ObservableObject {
     }
 }
 
+/// Where a sideways swipe on the sidebar is heading.
+struct SwipePreview: Equatable {
+    let target: Space.ID
+    /// 1 to the next Space (on the right), -1 to the previous one.
+    let direction: Int
+    /// 0...1: how far along the swipe is.
+    let progress: CGFloat
+}
+
 /// The Space dialogs: making a new one, editing, confirming a delete.
 enum SpacePrompt: Identifiable, Equatable {
     case new
     case edit(Space.ID)
     case delete(Space.ID)
+    /// A new folder in the current Space, with this tab put in it if given.
+    case newFolder(Tab.ID?)
+    case renameFolder(Folder.ID)
 
     var id: String {
         switch self {
         case .new: "new"
         case .edit(let id): "edit-\(id)"
         case .delete(let id): "delete-\(id)"
+        case .newFolder(let tab): "new-folder-\(tab?.uuidString ?? "")"
+        case .renameFolder(let id): "rename-folder-\(id)"
         }
     }
 }

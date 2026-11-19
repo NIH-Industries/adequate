@@ -79,6 +79,11 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
   address you pinned, wherever you browse in it (right-click › Back to Pinned
   Page, or Pin This Page Instead). ⌘W puts a pin back to sleep rather than
   closing it: Unpin Tab gets rid of it.
+- **Folders**: the folder button at the top of the sidebar makes one. Drag a
+  tab onto a folder (or right-click › Move to Folder) to put it inside, which
+  pins it, so folders and what's in them come back after a restart. Click a
+  folder to open or close it; right-click to rename or remove it (its tabs stay
+  as ordinary pins). Not in throwaway Spaces.
 - **Fresh start**: other tabs aren't kept between launches; pins, Spaces and
   logins are.
 

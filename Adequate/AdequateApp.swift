@@ -85,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
     private var sidebarWatch: AnyCancellable?
     private var titlebarDoubleClick: TitlebarDoubleClick?
+    private var spaceSwipe: SpaceSwipe?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Take links ourselves, before SwiftUI can turn them into windows.
@@ -142,6 +143,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             spaces.mainWindow = window
             // There's no title bar to double-click, so the top of the sidebar stands in.
             titlebarDoubleClick = TitlebarDoubleClick(window: window)
+            // Swipe sideways on the sidebar to change Space.
+            spaceSwipe = SpaceSwipe(window: window, spaces: spaces)
             // With the sidebar hidden they'd sit on the page, so they go too.
             sidebarWatch = spaces.$sidebarShown.sink { [weak window] shown in
                 for kind in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {

@@ -32,6 +32,21 @@ struct BrowserView: View {
             // With the sidebar hidden, the site sits at the top of the window instead.
             if !spaces.sidebarShown { SiteBadge(state: spaces.current) }
         }
+        .overlay(alignment: .bottomLeading) {
+            // And a button to bring the sidebar back, where the hide button was.
+            if !spaces.sidebarShown {
+                Button { spaces.sidebarShown = true } label: {
+                    Image(systemName: "sidebar.left")
+                        .padding(7)
+                        .background(.regularMaterial, in: Circle())
+                        .overlay(Circle().strokeBorder(.separator))
+                }
+                .buttonStyle(.plain)
+                .help("Show Sidebar (⌘S)")
+                .padding(10)
+                .ignoresSafeArea()
+            }
+        }
         .overlay { TabSwitcher(state: spaces.current) }
         .sheet(item: $spaces.prompt) { prompt in
             SpacePromptSheet(spaces: spaces, prompt: prompt)
@@ -52,9 +67,22 @@ struct Sidebar: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(state.space.name).font(.headline).lineLimit(1)
                     // Where you are, somewhere a page can't draw over.
-                    if let tab = state.activeTab { SiteLabel(tab: tab) }
+                    // Click it for the full address, to edit or copy (same as ⌘L).
+                    if let tab = state.activeTab {
+                        SiteLabel(tab: tab)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .onTapGesture { tab.focusRequest += 1 }
+                    }
                 }
                 Spacer()
+                if !state.space.isThrowaway {
+                    Button { spaces.prompt = .newFolder(nil) } label: {
+                        Image(systemName: "folder.badge.plus")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("New Folder")
+                }
                 Menu {
                     SpaceMenuItems(spaces: spaces, id: state.space.id)
                 } label: {
@@ -69,9 +97,26 @@ struct Sidebar: View {
             .padding(.bottom, 14)
 
             List(selection: Binding(get: { state.selectedTabID }, set: { state.choose($0) })) {
-                // Pins first, kept across restarts, then a line, then the rest.
-                ForEach(state.pinnedTabs) { row($0) }
-                if !state.pinnedTabs.isEmpty && !state.unpinnedTabs.isEmpty {
+                // Pins first, kept across restarts, then folders (which hold
+                // pins too), then a line, then the rest.
+                ForEach(state.looseTabs) { row($0) }
+                ForEach(state.folders) { folder in
+                    FolderRow(folder: folder, count: state.tabs(in: folder.id).count,
+                              toggle: { state.toggleFolder(folder.id) },
+                              rename: { spaces.prompt = .renameFolder(folder.id) },
+                              remove: { state.removeFolder(folder.id) },
+                              dropTab: { items in
+                                  guard let text = items.first, let dragged = UUID(uuidString: text) else { return false }
+                                  state.move(dragged, toFolder: folder.id)
+                                  return true
+                              })
+                    // A closed folder still shows the tab you're on (and its split
+                    // partner), so you can always see where you are.
+                    ForEach(state.tabs(in: folder.id).filter {
+                        folder.isOpen || $0.id == state.selectedTabID || $0.id == state.splitTabID
+                    }) { row($0, indented: true) }
+                }
+                if (!state.pinnedTabs.isEmpty || !state.folders.isEmpty) && !state.unpinnedTabs.isEmpty {
                     Divider()
                 }
                 ForEach(state.unpinnedTabs) { row($0) }
@@ -83,10 +128,20 @@ struct Sidebar: View {
         }
         // A wash of the Space's colour, so you can tell at a glance where you are.
         .background(state.space.tint.opacity(0.12))
+        .animation(.easeInOut(duration: 0.3), value: state.space.id)
         .tint(state.space.tint)
+        // While you swipe: the Space it's heading for, filling in until it switches.
+        .overlay {
+            if let hint = spaces.swipePreview, let target = spaces.state(hint.target) {
+                SwipeHint(state: target, hint: hint)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: spaces.swipePreview == nil)
     }
 
-    private func row(_ tab: Tab) -> some View {
+    private func row(_ tab: Tab, indented: Bool = false) -> some View {
                     TabRow(tab: tab,
                            inSplit: state.splitTabID == tab.id,
                            canSplit: state.selectedTabID != tab.id,
@@ -103,11 +158,80 @@ struct Sidebar: View {
                            canPin: !state.space.isThrowaway,
                            togglePin: { tab.isPinned ? state.unpin(tab.id) : state.pin(tab.id) },
                            repin: { state.repin(tab.id) },
+                           folders: state.folders,
+                           currentFolder: state.folderOf[tab.id],
+                           moveToFolder: { state.move(tab.id, toFolder: $0) },
+                           newFolder: { spaces.prompt = .newFolder(tab.id) },
                            resetPermissions: { site in
                                state.resetPermissions(for: site)
                                spaces.show(toast: "\(site) can ask again")
                            })
+                        .padding(.leading, indented ? 16 : 0)
                         .tag(tab.id)
+    }
+}
+
+/// The pill shown mid-swipe: the next Space's emoji and name, an arrow the way
+/// you're going, and an outline that fills in as the swipe nears switching.
+struct SwipeHint: View {
+    @ObservedObject var state: SpaceState
+    let hint: SwipePreview
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if hint.direction < 0 { Image(systemName: "chevron.left") }
+            Text(state.space.symbol).font(.title3)
+            Text(state.space.name).font(.headline).lineLimit(1)
+            if hint.direction > 0 { Image(systemName: "chevron.right") }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        .background(.regularMaterial, in: Capsule())
+        .background(Capsule().fill(state.space.tint.opacity(0.25 * hint.progress)))
+        .overlay(Capsule().trim(from: 0, to: hint.progress).stroke(state.space.tint, lineWidth: 2.5))
+        .scaleEffect(0.85 + 0.15 * hint.progress)
+        .opacity(0.5 + 0.5 * hint.progress)
+        .shadow(radius: 8, y: 2)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.easeOut(duration: 0.08), value: hint.progress)
+    }
+}
+
+/// A folder's line in the sidebar: click to open or close it, drop a tab on
+/// it to put the tab inside, right-click to rename or remove it.
+struct FolderRow: View {
+    let folder: Folder
+    let count: Int
+    let toggle: () -> Void
+    let rename: () -> Void
+    let remove: () -> Void
+    /// A tab (its id, as text) was dropped on the folder.
+    let dropTab: ([String]) -> Bool
+    @State private var dropTargeted = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: folder.isOpen ? "chevron.down" : "chevron.right")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 10)
+            Image(systemName: folder.isOpen ? "folder.fill" : "folder")
+                .foregroundStyle(.secondary)
+            Text(folder.name).lineLimit(1).fontWeight(.medium)
+            Spacer()
+            Text("\(count)").font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 5)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: toggle)
+        .dropDestination(for: String.self) { items, _ in dropTab(items) } isTargeted: { dropTargeted = $0 }
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(dropTargeted ? 0.3 : 0)))
+        .contextMenu {
+            Button(folder.isOpen ? "Close Folder" : "Open Folder", action: toggle)
+            Button("Rename Folder…", action: rename)
+            Divider()
+            Button("Remove Folder", action: remove)
+        }
+        .help("Drag tabs here to keep them in \(folder.name)")
     }
 }
 
@@ -237,6 +361,11 @@ struct SpaceSwitcher: View {
 
     var body: some View {
         HStack(spacing: 6) {
+            Button { spaces.sidebarShown = false } label: {
+                Image(systemName: "sidebar.left")
+            }
+            .buttonStyle(.borderless)
+            .help("Hide Sidebar (⌘S)")
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     ForEach(Array(spaces.states.enumerated()), id: \.element.space.id) { index, state in
@@ -314,6 +443,12 @@ struct TabRow: View {
     let togglePin: () -> Void
     /// Pin the page it's on now instead.
     let repin: () -> Void
+    /// The folders in this Space, and the one this tab is in.
+    let folders: [Folder]
+    let currentFolder: Folder.ID?
+    /// Put it in a folder (pinning it), or with nil, out of its folder.
+    let moveToFolder: (Folder.ID?) -> Void
+    let newFolder: () -> Void
     let resetPermissions: (String) -> Void
     @State private var hovering = false
     @State private var dropTargeted = false
@@ -392,6 +527,20 @@ struct TabRow: View {
                 Button("Back to Pinned Page", action: tab.returnToPin)
                 Button("Pin This Page Instead", action: repin)
             }
+            if canPin {
+                // Folders keep saved links, so putting a tab in one pins it.
+                Menu("Move to Folder") {
+                    ForEach(folders) { folder in
+                        Button(folder.name) { moveToFolder(folder.id) }.disabled(folder.id == currentFolder)
+                    }
+                    if !folders.isEmpty { Divider() }
+                    Button("New Folder…", action: newFolder)
+                }
+                .disabled(!tab.isPinned && !["http", "https", "file"].contains(URL(string: tab.address)?.scheme ?? ""))
+                if currentFolder != nil {
+                    Button("Remove from Folder") { moveToFolder(nil) }
+                }
+            }
             Divider()
             if inSplit {
                 Button("Close Split View", action: closeSplit)
@@ -436,6 +585,15 @@ struct SpacePromptSheet: View {
                     throwaway = space.isThrowaway
                     wasThrowaway = space.isThrowaway
                 }
+            case .newFolder(let tab):
+                folderForm(title: "New Folder", action: "Create") {
+                    spaces.current.addFolder(named: name, moving: tab)
+                }
+            case .renameFolder(let id):
+                folderForm(title: "Rename Folder", action: "Save") {
+                    spaces.current.renameFolder(id, to: name)
+                }
+                .onAppear { name = spaces.current.folders.first { $0.id == id }?.name ?? "" }
             case .delete(let id):
                 let spaceName = spaces.state(id)?.space.name ?? "this Space"
                 Text("Delete \(spaceName)?").font(.headline)
@@ -456,6 +614,23 @@ struct SpacePromptSheet: View {
         .frame(width: 440)
         // The colour panel goes with the dialog it was picking for.
         .onDisappear { ColorPanel.shared.close() }
+    }
+
+    /// A folder's name: just a name, no colour or emoji.
+    @ViewBuilder
+    private func folderForm(title: String, action: String, commit: @escaping () -> Void) -> some View {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        Text(title).font(.headline)
+        TextField("Folder name", text: $name)
+            .textFieldStyle(.roundedBorder)
+            .onSubmit { if !trimmed.isEmpty { spaces.prompt = nil; commit() } }
+        HStack {
+            Spacer()
+            Button("Cancel", role: .cancel) { spaces.prompt = nil }.keyboardShortcut(.cancelAction)
+            Button(action) { spaces.prompt = nil; commit() }
+                .keyboardShortcut(.defaultAction)
+                .disabled(trimmed.isEmpty)
+        }
     }
 
     @ViewBuilder
