@@ -16,6 +16,11 @@ RELEASE := tmp/release
 RELEASE_APP := $(RELEASE)/Adequate.app
 RELEASE_ZIP := $(RELEASE)/Adequate-$(VERSION).zip
 
+# Everyday builds are signed with your Developer ID when it's in your
+# keychain, so each rebuild is the same app to macOS and your permissions
+# stick. Without one they're signed ad-hoc, which needs no Apple account.
+SIGN := $(shell security find-identity -v -p codesigning 2>/dev/null | grep -q '"$(IDENTITY)' && echo "$(IDENTITY)" || echo -)
+
 .PHONY: build install run project cli install-cli release
 
 project:
@@ -24,7 +29,7 @@ project:
 build: project cli
 	xcodebuild -project Adequate.xcodeproj -scheme Adequate -configuration Debug \
 	  -derivedDataPath tmp/DerivedData -quiet build
-	codesign --force --sign - --options runtime --entitlements Adequate/Adequate.entitlements $(BUILT)
+	codesign --force --sign "$(SIGN)" --options runtime --entitlements Adequate/Adequate.entitlements $(BUILT)
 
 # Installs to ~/Applications, the one copy macOS should open links with.
 # The build in tmp/ is unregistered so links never go to it.
