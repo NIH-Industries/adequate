@@ -37,7 +37,7 @@ install: build
 	-osascript -e 'quit app "Adequate"'
 	mkdir -p $(dir $(APP))
 	rsync -a --delete $(BUILT)/ $(APP)/
-	$(LSREGISTER) -u $(BUILT)
+	-$(LSREGISTER) -u $(BUILT) 2>/dev/null
 	$(LSREGISTER) -f $(APP)
 
 run: install
