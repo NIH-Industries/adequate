@@ -993,7 +993,7 @@ struct WebViewHost: NSViewRepresentable {
     let webView: WKWebView
 
     func makeNSView(context: Context) -> NSView {
-        let container = NSView()
+        let container = PageContainer()
         adopt(into: container)
         return container
     }
@@ -1007,8 +1007,20 @@ struct WebViewHost: NSViewRepresentable {
     private func adopt(into container: NSView) {
         guard webView.superview !== container else { return }
         webView.removeFromSuperview()
-        webView.frame = container.bounds
-        webView.autoresizingMask = [.width, .height]
+        if !container.bounds.isEmpty { webView.frame = container.bounds }
         container.addSubview(webView)
+    }
+}
+
+/// Holds a tab's page and keeps it the holder's size, except at 0×0.
+/// SwiftUI lays a new holder out at nothing before its real size (coming
+/// back to a tab), and squashes the old one as you leave. A page that keeps
+/// your place by measuring the view (Slack's message list) loses it when
+/// squashed and jumps back several pages, so the page keeps its last real
+/// size until a real one comes along.
+final class PageContainer: NSView {
+    override func resizeSubviews(withOldSize oldSize: NSSize) {
+        guard !bounds.isEmpty else { return }
+        subviews.forEach { $0.frame = bounds }
     }
 }
