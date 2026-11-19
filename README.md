@@ -40,7 +40,8 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
   (remembered per site per Space). Clicking one brings back its tab. They
   only come while Adequate is open with the tab loaded: there's no push.
 - **Suggestions**: the address bar suggests sites (protocol and domain) from
-  the Space's own history as you type (↑/↓ to choose). Each Space keeps its history to
+  the Space's own history as you type (↑/↓ to choose, Return to go there,
+  or Tab to put it in the field and add a path, like `/admin`). Each Space keeps its history to
   itself, in `history/<space id>.json`, and deleting the Space deletes it.
 - **Where you are**: the address bar is usually hidden, so the site's name
   sits under the Space name in the sidebar (or in a pill at the top of the

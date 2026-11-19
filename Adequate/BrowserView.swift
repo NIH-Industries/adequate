@@ -1010,7 +1010,7 @@ struct TabPage: View {
                     .disabled(!tab.canGoForward).help("Forward (⌘])")
                 Button(action: tab.reload) { Image(systemName: tab.isLoading ? "xmark" : "arrow.clockwise") }
                     .help(tab.isLoading ? "Stop" : "Reload (⌘R)")
-                AddressField(text: $draft, onEdit: suggest, onMove: move, onSubmit: go,
+                AddressField(text: $draft, onEdit: suggest, onMove: move, onComplete: complete, onSubmit: go,
                              onCancel: { finish(); tab.focusPage() }, onEndEditing: finish)
                     .frame(height: 20)
             }
@@ -1050,6 +1050,13 @@ struct TabPage: View {
         // Up past the first suggestion is back to just what you typed.
         let next = (chosen ?? -1) + step
         chosen = next < 0 ? nil : min(next, suggestions.count - 1)
+    }
+
+    /// Tab: the chosen suggestion (or the first) into the field, to add a
+    /// path to before going there.
+    private func complete() -> String? {
+        guard let suggestion = chosen.map({ suggestions[$0] }) ?? suggestions.first else { return nil }
+        return History.editable(suggestion.entry.url)
     }
 
     private func go() {
@@ -1136,13 +1143,14 @@ struct SuggestionRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(entry.title.isEmpty ? History.bare(entry.url) : entry.title)
-                .lineLimit(1)
+            // Just the site: its last page's title is often a passing one.
             Text(History.bare(entry.url))
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .foregroundStyle(chosen ? Color.white.opacity(0.8) : .secondary)
             Spacer(minLength: 0)
+            if chosen {
+                Text("⇥ to edit").foregroundStyle(Color.white.opacity(0.75))
+            }
         }
         .font(.system(size: 13))
         .foregroundStyle(chosen ? Color.white : .primary)
@@ -1160,6 +1168,8 @@ struct AddressField: NSViewRepresentable {
     var placeholder = "Search or enter address"
     var onEdit: (String) -> Void
     var onMove: (Int) -> Void
+    /// Tab: what to put in the field to carry on typing, or nil to leave it.
+    var onComplete: () -> String? = { nil }
     var onSubmit: () -> Void
     var onCancel: () -> Void
     var onEndEditing: () -> Void
@@ -1201,6 +1211,12 @@ struct AddressField: NSViewRepresentable {
             switch selector {
             case #selector(NSResponder.moveUp(_:)): parent.onMove(-1)
             case #selector(NSResponder.moveDown(_:)): parent.onMove(1)
+            case #selector(NSResponder.insertTab(_:)):
+                guard let text = parent.onComplete() else { return false }
+                textView.string = text
+                textView.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
+                parent.text = text
+                parent.onEdit(text)
             case #selector(NSResponder.insertNewline(_:)): parent.onSubmit()
             case #selector(NSResponder.cancelOperation(_:)): parent.onCancel()
             default: return false

@@ -86,8 +86,9 @@ final class History {
         return entries.values.compactMap { entry -> (Suggestion, Double)? in
             let address = Self.bare(entry.url.lowercased())
             let isPrefix = !stripped.isEmpty && address.hasPrefix(stripped)
-            let haystack = address + " " + entry.title.lowercased()
-            guard isPrefix || words.allSatisfy(haystack.contains) else { return nil }
+            // Addresses only: titles aren't shown, and a site's last title is
+            // often a passing one ("Redirecting…"), so they'd match for no visible reason.
+            guard isPrefix || words.allSatisfy(address.contains) else { return nil }
             // Visits, typed ones worth more, fading with a two-week half-life.
             let age = now.timeIntervalSince(entry.last) / 86_400
             var score = Double(entry.visits + 3 * entry.typed) * pow(0.5, age / 14)
@@ -98,6 +99,14 @@ final class History {
         .sorted { ($0.0.isPrefix ? 1 : 0, $0.1) > ($1.0.isPrefix ? 1 : 0, $1.1) }
         .prefix(limit)
         .map(\.0)
+    }
+
+    /// A site as you'd type it to carry on to a page there: bare, with a
+    /// slash to add a path after. A plain-HTTP site keeps its http://, or
+    /// it'd be taken for HTTPS.
+    static func editable(_ url: String) -> String {
+        let address = url.hasPrefix("http://") && !bare(url).hasPrefix("localhost") ? url : bare(url)
+        return address + "/"
     }
 
     /// An address without its scheme or www., as you'd type it.
