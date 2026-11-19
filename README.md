@@ -114,6 +114,7 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
 | ⌘⇧[ / ⌘⇧] | previous / next tab in the sidebar |
 | ⌘1–⌘8, ⌘9 | tab by position, last tab |
 | ⌃1–⌃9 | Space by position |
+| hold ⌘ / ⌃ | show each tab's / Space's number |
 | fn⌃F | fill the screen with the window (macOS's own Window › Fill) |
 | ⌘⇧N | new Space |
 | ⌘⇧A | next tab playing sound, in any Space |

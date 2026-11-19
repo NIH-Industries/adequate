@@ -166,7 +166,8 @@ struct Sidebar: View {
                            resetPermissions: { site in
                                state.resetPermissions(for: site)
                                spaces.show(toast: "\(site) can ask again")
-                           })
+                           },
+                           number: spaces.numbersShown == .tabs ? state.tabNumbers[tab.id] : nil)
                         .padding(.leading, indented ? 16 : 0)
                         .tag(tab.id)
     }
@@ -370,7 +371,8 @@ struct SpaceSwitcher: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     ForEach(Array(spaces.states.enumerated()), id: \.element.space.id) { index, state in
-                        SpaceDot(state: state, number: index + 1, selected: state.space.id == spaces.selected) {
+                        SpaceDot(state: state, number: index + 1, selected: state.space.id == spaces.selected,
+                                 showNumber: spaces.numbersShown == .spaces && index < 9) {
                             spaces.select(state.space.id)
                         }
                         .contextMenu { SpaceMenuItems(spaces: spaces, id: state.space.id) }
@@ -394,6 +396,8 @@ struct SpaceDot: View {
     @ObservedObject var state: SpaceState
     let number: Int
     let selected: Bool
+    /// ⌃ is held: show its ⌃ number.
+    var showNumber = false
     let action: () -> Void
 
     var body: some View {
@@ -422,6 +426,10 @@ struct SpaceDot: View {
                 }
         }
         .buttonStyle(.plain)
+        .overlay {
+            if showNumber { ShortcutBadge(text: "⌃\(number)") }
+        }
+        .animation(.easeOut(duration: 0.12), value: showNumber)
         .help((state.space.isThrowaway ? "\(state.space.name), throwaway" : state.space.name)
               + (number <= 9 ? " (⌃\(number))" : ""))
     }
@@ -451,6 +459,8 @@ struct TabRow: View {
     let moveToFolder: (Folder.ID?) -> Void
     let newFolder: () -> Void
     let resetPermissions: (String) -> Void
+    /// Its ⌘ number, while ⌘ is held.
+    var number: Int? = nil
     @State private var hovering = false
     @State private var dropZone: TabDropZone?
     @State private var rowHeight: CGFloat = 30
@@ -518,6 +528,10 @@ struct TabRow: View {
                     .allowsHitTesting(false)
             }
         }
+        .overlay(alignment: .trailing) {
+            if let number { ShortcutBadge(text: "⌘\(number)") }
+        }
+        .animation(.easeOut(duration: 0.12), value: number)
         .contextMenu {
             Button("Copy Link") {
                 NSPasteboard.general.clearContents()
@@ -563,6 +577,22 @@ struct TabRow: View {
             Button("Open in New Window", action: popOut)
             Button("Close Tab", action: close)
         }
+    }
+}
+
+/// A shortcut shown while its modifier is held, e.g. ⌘3 on a tab.
+struct ShortcutBadge: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 10, weight: .semibold).monospacedDigit())
+            .foregroundStyle(.white)
+            .padding(.horizontal, 5).padding(.vertical, 2)
+            .background(Capsule().fill(Color.accentColor))
+            .fixedSize()
+            .allowsHitTesting(false)
+            .transition(.opacity)
     }
 }
 

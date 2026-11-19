@@ -512,6 +512,15 @@ final class SpaceState: ObservableObject {
         if let folder = folderOf.removeValue(forKey: tab.id) { folderOf[sleeper.id] = folder }
     }
 
+    /// The ⌘ number each tab answers to: ⌘1–8 by position, ⌘9 the last.
+    var tabNumbers: [Tab.ID: Int] {
+        let tabs = sidebarTabs
+        var numbers: [Tab.ID: Int] = [:]
+        for (index, tab) in tabs.prefix(8).enumerated() { numbers[tab.id] = index + 1 }
+        if let last = tabs.last { numbers[last.id] = 9 }
+        return numbers
+    }
+
     /// ⌘1..⌘8 pick a tab by position; ⌘9 always the last.
     func selectTab(number: Int) {
         let tabs = sidebarTabs
@@ -680,6 +689,9 @@ final class SpaceStore: ObservableObject {
     /// While two fingers swipe the sidebar: the Space it's heading for, and how
     /// far along the swipe is (1 switches).
     @Published var swipePreview: SwipePreview?
+    /// ⌘ or ⌃ held on its own for a moment: the shortcut numbers on tabs or Spaces.
+    @Published private(set) var numbersShown: ShortcutNumbers?
+    private var numbersTask: Task<Void, Never>?
     private var toastTask: Task<Void, Never>?
     /// Brings the main window back, set once the window has appeared.
     var showWindow: (() -> Void)?
@@ -923,8 +935,35 @@ final class SpaceStore: ObservableObject {
         resignObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.states.forEach { $0.cancelCycle() } }
+            MainActor.assumeIsolated {
+                self?.states.forEach { $0.cancelCycle() }
+                self?.hideNumbers()
+            }
         }
+    }
+
+    /// ⌘ alone held for a moment shows the tabs' numbers, ⌃ alone the Spaces'.
+    /// Anything else (another modifier, letting go) hides them.
+    private func holdChanged(_ flags: NSEvent.ModifierFlags, in window: NSWindow?) {
+        let wanted: ShortcutNumbers? = switch flags {
+        case [.command]: .tabs
+        case [.control]: .spaces
+        default: nil
+        }
+        guard let wanted, window === mainWindow, NSApp.keyWindow === mainWindow,
+              prompt == nil, !current.isCycling else { return hideNumbers() }
+        guard numbersShown != wanted else { return }
+        hideNumbers()
+        numbersTask = Task {
+            try? await Task.sleep(for: .seconds(0.5))
+            if !Task.isCancelled { numbersShown = wanted }
+        }
+    }
+
+    private func hideNumbers() {
+        numbersTask?.cancel()
+        numbersTask = nil
+        if numbersShown != nil { numbersShown = nil }
     }
 
     /// Clicking into a pane of a split view makes it the one shortcuts act on.
@@ -940,6 +979,7 @@ final class SpaceStore: ObservableObject {
 
     private func handle(_ event: NSEvent) -> NSEvent? {
         if event.type == .leftMouseDown {
+            hideNumbers()
             noteClick(event)
             return event
         }
@@ -947,7 +987,13 @@ final class SpaceStore: ObservableObject {
 
         if event.type == .flagsChanged {
             if !flags.contains(.control) { current.endCycle() }
+            holdChanged(flags, in: event.window)
             return event
+        }
+        // A digit keeps the numbers up, to pick another; any other key is a
+        // shortcut (⌘T, ⌃Tab), so they go.
+        if event.type == .keyDown, !(event.charactersIgnoringModifiers.flatMap { Int($0) }.map { (1...9).contains($0) } ?? false) {
+            hideNumbers()
         }
         // The ⌃Tab switcher is up: Esc backs out, other keys are swallowed.
         if current.isCycling, event.keyCode != 48 {
@@ -1019,6 +1065,14 @@ final class SpaceStore: ObservableObject {
         }
         return nil
     }
+}
+
+/// Which shortcut numbers a held modifier is showing.
+enum ShortcutNumbers {
+    /// ⌘: on each tab in the sidebar.
+    case tabs
+    /// ⌃: on each Space's dot.
+    case spaces
 }
 
 /// Where a sideways swipe on the sidebar is heading.
