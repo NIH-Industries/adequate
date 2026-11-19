@@ -112,9 +112,7 @@ struct Sidebar: View {
                               })
                     // A closed folder still shows the tab you're on (and its split
                     // partner), so you can always see where you are.
-                    ForEach(state.tabs(in: folder.id).filter {
-                        folder.isOpen || $0.id == state.selectedTabID || $0.id == state.splitTabID
-                    }) { row($0, indented: true) }
+                    ForEach(state.shownTabs(in: folder)) { row($0, indented: true) }
                 }
                 if (!state.pinnedTabs.isEmpty || !state.folders.isEmpty) && !state.unpinnedTabs.isEmpty {
                     Divider()

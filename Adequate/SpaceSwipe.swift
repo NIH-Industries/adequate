@@ -45,6 +45,8 @@ final class SpaceSwipe {
         // The glide after the fingers lift belongs to whoever owned the swipe.
         guard event.momentumPhase.isEmpty else { return owned == true ? nil : event }
         guard let sidebar = window.sidebarFrame, sidebar.contains(event.locationInWindow) else { return event }
+        // The row of Space dots scrolls sideways once there are too many to fit: there, it scrolls.
+        if owned == nil, Self.scrollsSideways(window.contentView?.superview?.hitTest(event.locationInWindow)) { owned = false }
 
         let across = event.scrollingDeltaX, down = event.scrollingDeltaY
         if owned == nil, across != 0 || down != 0 { owned = abs(across) > abs(down) }
@@ -77,7 +79,21 @@ final class SpaceSwipe {
     }
 }
 
-private extension NSWindow {
+extension SpaceSwipe {
+    /// Something under the pointer that scrolls sideways itself (its content
+    /// is wider than it is).
+    static func scrollsSideways(_ view: NSView?) -> Bool {
+        var view = view
+        while let current = view {
+            if let scroll = current as? NSScrollView, let content = scroll.documentView,
+               content.frame.width > scroll.contentView.bounds.width + 1 { return true }
+            view = current.superview
+        }
+        return false
+    }
+}
+
+extension NSWindow {
     /// The sidebar's frame in window coordinates: the first pane of the
     /// window's split view. Nil if there isn't one to ask, and empty while the
     /// sidebar is hidden.

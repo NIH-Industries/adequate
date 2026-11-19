@@ -46,6 +46,11 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
   sits under the Space name in the sidebar (or in a pill at the top of the
   window when the sidebar is hidden), with a padlock when the whole page came
   over HTTPS and a warning when it didn't. Pages can't draw over either.
+  Click the site name for the full address, to edit or copy (as ⌘L).
+- **Sidebar**: hide it with the button at its bottom left (or ⌘S); a button
+  at the bottom left of the window brings it back. Swipe sideways on it with
+  two fingers to go to the next or previous Space. Double-click its top to
+  zoom the window, as you would a title bar.
 - **Asking first**: a page has to ask before it opens another app (Zoom,
   Slack, Mail). A yes, like a camera or microphone yes, holds for that site in
   that Space until Adequate quits; a no holds until the page reloads, so it
@@ -83,7 +88,8 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
   tab onto a folder (or right-click › Move to Folder) to put it inside, which
   pins it, so folders and what's in them come back after a restart. Click a
   folder to open or close it; right-click to rename or remove it (its tabs stay
-  as ordinary pins). Not in throwaway Spaces.
+  as ordinary pins). Not in throwaway Spaces. ⌘1–9 and ⌘⇧[ / ⌘⇧] go by the
+  tabs as the sidebar shows them, skipping those in closed folders.
 - **Fresh start**: other tabs aren't kept between launches; pins, Spaces and
   logins are.
 
@@ -104,6 +110,7 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
 | ⌘⇧[ / ⌘⇧] | previous / next tab in the sidebar |
 | ⌘1–⌘8, ⌘9 | tab by position, last tab |
 | ⌃1–⌃9 | Space by position |
+| fn⌃F | fill the screen with the window (macOS's own Window › Fill) |
 | ⌘⇧N | new Space |
 | ⌘⇧A | next tab playing sound, in any Space |
 | ⌥⌘L | show Downloads in Finder |

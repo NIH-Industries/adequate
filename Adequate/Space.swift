@@ -205,6 +205,8 @@ final class SpaceState: ObservableObject {
     func setThrowaway(_ throwaway: Bool) {
         guard throwaway != space.isThrowaway else { return }
         space.throwaway = throwaway ? true : nil
+        // Folders only hold pins, which a throwaway Space can't have.
+        if throwaway { space.folders = nil }
         let id = space.id
         forgetEverything()
         if throwaway { Self.eraseSaved(id) }
@@ -373,6 +375,16 @@ final class SpaceState: ObservableObject {
 
     func tabs(in folder: Folder.ID) -> [Tab] { tabs.filter { folderOf[$0.id] == folder } }
 
+    /// A folder's tabs as the sidebar shows them: all of them while it's open,
+    /// and only the tab you're on (and its split partner) while it's closed.
+    func shownTabs(in folder: Folder) -> [Tab] {
+        tabs(in: folder.id).filter { folder.isOpen || $0.id == selectedTabID || $0.id == splitTabID }
+    }
+
+    /// Every tab the sidebar shows, top to bottom: loose pins, then each
+    /// folder's, then the rest. ⌘1–9 and ⌘⇧[ / ⌘⇧] go by this.
+    var sidebarTabs: [Tab] { looseTabs + folders.flatMap(shownTabs) + unpinnedTabs }
+
     /// Makes a folder, and puts a tab in it if one is given (pinning it).
     @discardableResult
     func addFolder(named name: String, moving tab: Tab.ID? = nil) -> Folder.ID? {
@@ -480,6 +492,7 @@ final class SpaceState: ObservableObject {
 
     /// ⌘1..⌘8 pick a tab by position; ⌘9 always the last.
     func selectTab(number: Int) {
+        let tabs = sidebarTabs
         guard !tabs.isEmpty else { return }
         let index = number == 9 ? tabs.count - 1 : number - 1
         if tabs.indices.contains(index) { selectedTabID = tabs[index].id }
@@ -487,6 +500,7 @@ final class SpaceState: ObservableObject {
 
     /// The tab above or below the selected one in the sidebar, wrapping.
     func selectAdjacentTab(_ offset: Int) {
+        let tabs = sidebarTabs
         guard !tabs.isEmpty else { return }
         let current = tabs.firstIndex { $0.id == selectedTabID } ?? 0
         selectedTabID = tabs[(current + offset + tabs.count) % tabs.count].id

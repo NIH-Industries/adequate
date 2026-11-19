@@ -41,27 +41,13 @@ final class TitlebarDoubleClick {
 
     /// The top of the sidebar, but not its buttons, the traffic lights or a page.
     private func isTitlebarArea(_ point: NSPoint, in window: NSWindow) -> Bool {
-        if let sidebar = sidebarFrame(in: window), !sidebar.contains(point) { return false }
+        // No split view to ask: the whole top edge counts (pages and controls still excluded).
+        if let sidebar = window.sidebarFrame, !sidebar.contains(point) { return false }
         var view = window.contentView?.superview?.hitTest(point)
         while let current = view {
             if current is WKWebView || current is NSControl { return false }
             view = current.superview
         }
         return true
-    }
-
-    /// The sidebar's frame in window coordinates: the first pane of the
-    /// window's split view. Nil if there's no split view to ask, in which case
-    /// the whole top edge counts (pages and controls still excluded). Empty
-    /// while the sidebar is hidden, so a hidden sidebar claims no clicks.
-    private func sidebarFrame(in window: NSWindow) -> NSRect? {
-        func firstSplit(in view: NSView) -> NSSplitView? {
-            if let split = view as? NSSplitView { return split }
-            for sub in view.subviews { if let found = firstSplit(in: sub) { return found } }
-            return nil
-        }
-        guard let content = window.contentView, let split = firstSplit(in: content),
-              let first = split.arrangedSubviews.first else { return nil }
-        return first.isHidden ? .zero : first.convert(first.bounds, to: nil)
     }
 }
