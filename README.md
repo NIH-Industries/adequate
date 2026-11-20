@@ -46,11 +46,17 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
   itself, in `history/<space id>.json`, and deleting the Space deletes it.
 - **Where you are**: the address bar is usually hidden, so the site's name
   sits under the Space name in the sidebar (or in a pill at the top of the
-  window when the sidebar is hidden), with a padlock when the whole page came
+  window when the sidebar is narrowed or hidden), with a padlock when the whole page came
   over HTTPS and a warning when it didn't. Pages can't draw over either.
   Click the site name for the full address, to edit or copy (as ⌘L).
-- **Sidebar**: hide it with the button at its bottom left (or ⌘S); a button
-  at the bottom left of the window brings it back. Swipe sideways on it with
+- **Sidebar**: ⌘S (or the button at its bottom left) narrows it to a rail:
+  the Space's emoji (click it for the Space's menu), a favicon for each tab
+  (hover for its title), folders as icons with their tabs marked by a bar in
+  the Space's colour, a ring for a download in progress, and the Space dots.
+  ⌘S again, or the button at the rail's foot, brings the full sidebar back;
+  dragging the sidebar's edge shut narrows it too. Adequate remembers which
+  you left it as. ⌥⌘S hides it altogether, for a call or a film, and again
+  brings it back. Swipe sideways on it with
   two fingers to go to the next or previous Space. Double-click its top to
   zoom the window, as you would a title bar.
 - **Asking first**: a page has to ask before it opens another app (Zoom,

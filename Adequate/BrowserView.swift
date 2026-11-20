@@ -5,18 +5,17 @@ struct BrowserView: View {
     @ObservedObject var spaces: SpaceStore
 
     var body: some View {
-        NavigationSplitView(columnVisibility: Binding(
-            get: { spaces.sidebarShown ? .all : .detailOnly },
-            set: { spaces.sidebarShown = $0 != .detailOnly }
-        )) {
-            Sidebar(spaces: spaces, state: spaces.current)
-                .toolbar(removing: .sidebarToggle)
-                .navigationSplitViewColumnWidth(min: 200, ideal: 240)
-        } detail: {
-            SpaceDetail(state: spaces.current)
-                .id(spaces.selected)
+        HStack(spacing: 0) {
+            if spaces.sidebarMode == .rail {
+                Sidebar(spaces: spaces, state: spaces.current, compact: true)
+                    .frame(width: SidebarMode.railWidth)
+                    // Above the page, so a swipe's pill isn't hidden under it.
+                    .zIndex(1)
+                Divider()
+            }
+            split
         }
-        // No title bar or toolbar: ⌘S shows and hides the sidebar.
+        // No title bar or toolbar: ⌘S switches between the sidebar and the rail.
         .toolbar(.hidden, for: .windowToolbar)
         .overlay(alignment: .bottom) {
             if let toast = spaces.toast {
@@ -29,27 +28,27 @@ struct BrowserView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: spaces.toast)
         .overlay(alignment: .top) {
-            // With the sidebar hidden, the site sits at the top of the window instead.
+            // Without the full sidebar, the site sits at the top of the window instead.
             if !spaces.sidebarShown { SiteBadge(state: spaces.current) }
-        }
-        .overlay(alignment: .bottomLeading) {
-            // And a button to bring the sidebar back, where the hide button was.
-            if !spaces.sidebarShown {
-                Button { spaces.sidebarShown = true } label: {
-                    Image(systemName: "sidebar.left")
-                        .padding(7)
-                        .background(.regularMaterial, in: Circle())
-                        .overlay(Circle().strokeBorder(.separator))
-                }
-                .buttonStyle(.plain)
-                .help("Show Sidebar (⌘S)")
-                .padding(10)
-                .ignoresSafeArea()
-            }
         }
         .overlay { TabSwitcher(state: spaces.current) }
         .sheet(item: $spaces.prompt) { prompt in
             SpacePromptSheet(spaces: spaces, prompt: prompt)
+        }
+    }
+
+    /// The full sidebar and the page. Dragging the sidebar's edge shut leaves the rail.
+    private var split: some View {
+        NavigationSplitView(columnVisibility: Binding(
+            get: { spaces.sidebarShown ? .all : .detailOnly },
+            set: { spaces.sidebarMode = $0 == .detailOnly ? (spaces.sidebarShown ? .rail : spaces.sidebarMode) : .full }
+        )) {
+            Sidebar(spaces: spaces, state: spaces.current)
+                .toolbar(removing: .sidebarToggle)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+        } detail: {
+            SpaceDetail(state: spaces.current)
+                .id(spaces.selected)
         }
     }
 }
@@ -59,9 +58,53 @@ struct BrowserView: View {
 struct Sidebar: View {
     @ObservedObject var spaces: SpaceStore
     @ObservedObject var state: SpaceState
+    /// The rail: the Space's emoji, a favicon per tab, the Space dots. No titles.
+    var compact = false
 
     var body: some View {
         VStack(spacing: 0) {
+            if compact { railHeader } else { header }
+            tabList
+            if compact {
+                RailFooter(spaces: spaces)
+            } else {
+                DownloadsList(downloads: .shared)
+                Divider()
+                SpaceSwitcher(spaces: spaces)
+            }
+        }
+        // A wash of the Space's colour, so you can tell at a glance where you are.
+        .background(state.space.tint.opacity(0.12))
+        .animation(.easeInOut(duration: 0.3), value: state.space.id)
+        .tint(state.space.tint)
+        // While you swipe: the Space it's heading for, filling in until it switches.
+        .overlay {
+            if let hint = spaces.swipePreview, let target = spaces.state(hint.target) {
+                SwipeHint(state: target, hint: hint)
+                    .fixedSize()
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: spaces.swipePreview == nil)
+    }
+
+    /// Just the Space's emoji; click it for what its menu holds.
+    private var railHeader: some View {
+        Menu {
+            SpaceMenuItems(spaces: spaces, id: state.space.id)
+        } label: {
+            Text(state.space.symbol).font(.title2)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(state.space.name)
+        .padding(.top, 12)
+        .padding(.bottom, 6)
+    }
+
+    private var header: some View {
             HStack {
                 Text(state.space.symbol)
                 VStack(alignment: .leading, spacing: 2) {
@@ -95,13 +138,15 @@ struct Sidebar: View {
             .padding(.horizontal, 12)
             .padding(.top, 8)
             .padding(.bottom, 14)
+    }
 
+    private var tabList: some View {
             List(selection: Binding(get: { state.selectedTabID }, set: { state.choose($0) })) {
                 // Pins first, kept across restarts, then folders (which hold
                 // pins too), then a line, then the rest.
                 ForEach(state.looseTabs) { row($0) }
                 ForEach(state.folders) { folder in
-                    FolderRow(folder: folder, count: state.tabs(in: folder.id).count,
+                    FolderRow(folder: folder, count: state.tabs(in: folder.id).count, compact: compact,
                               toggle: { state.toggleFolder(folder.id) },
                               rename: { spaces.prompt = .renameFolder(folder.id) },
                               remove: { state.removeFolder(folder.id) },
@@ -119,24 +164,7 @@ struct Sidebar: View {
                 }
                 ForEach(state.unpinnedTabs) { row($0) }
             }
-
-            DownloadsList(downloads: .shared)
-            Divider()
-            SpaceSwitcher(spaces: spaces)
-        }
-        // A wash of the Space's colour, so you can tell at a glance where you are.
-        .background(state.space.tint.opacity(0.12))
-        .animation(.easeInOut(duration: 0.3), value: state.space.id)
-        .tint(state.space.tint)
-        // While you swipe: the Space it's heading for, filling in until it switches.
-        .overlay {
-            if let hint = spaces.swipePreview, let target = spaces.state(hint.target) {
-                SwipeHint(state: target, hint: hint)
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
-            }
-        }
-        .animation(.easeOut(duration: 0.15), value: spaces.swipePreview == nil)
+            .listStyle(.sidebar)
     }
 
     private func row(_ tab: Tab, indented: Bool = false) -> some View {
@@ -167,8 +195,15 @@ struct Sidebar: View {
                                state.resetPermissions(for: site)
                                spaces.show(toast: "\(site) can ask again")
                            },
-                           number: spaces.numbersShown == .tabs ? state.tabNumbers[tab.id] : nil)
-                        .padding(.leading, indented ? 16 : 0)
+                           number: spaces.numbersShown == .tabs ? state.tabNumbers[tab.id] : nil,
+                           compact: compact)
+                        .padding(.leading, indented && !compact ? 16 : 0)
+                        // In the rail, a folder's tabs wear a bar in the Space's colour.
+                        .overlay(alignment: .leading) {
+                            if indented && compact {
+                                Capsule().fill(state.space.tint).frame(width: 2.5).padding(.vertical, 2).offset(x: -6)
+                            }
+                        }
                         .tag(tab.id)
     }
 }
@@ -203,6 +238,8 @@ struct SwipeHint: View {
 struct FolderRow: View {
     let folder: Folder
     let count: Int
+    /// In the rail: just the folder icon.
+    var compact = false
     let toggle: () -> Void
     let rename: () -> Void
     let remove: () -> Void
@@ -212,15 +249,21 @@ struct FolderRow: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: folder.isOpen ? "chevron.down" : "chevron.right")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 10)
-            Image(systemName: folder.isOpen ? "folder.fill" : "folder")
-                .foregroundStyle(.secondary)
-            Text(folder.name).lineLimit(1).fontWeight(.medium)
-            Spacer()
-            Text("\(count)").font(.caption).foregroundStyle(.secondary)
+            if compact {
+                Image(systemName: folder.isOpen ? "folder.fill" : "folder")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+            } else {
+                Image(systemName: folder.isOpen ? "chevron.down" : "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 10)
+                Image(systemName: folder.isOpen ? "folder.fill" : "folder")
+                    .foregroundStyle(.secondary)
+                Text(folder.name).lineLimit(1).fontWeight(.medium)
+                Spacer()
+                Text("\(count)").font(.caption).foregroundStyle(.secondary)
+            }
         }
         .padding(.vertical, 5)
         .contentShape(Rectangle())
@@ -233,7 +276,7 @@ struct FolderRow: View {
             Divider()
             Button("Remove Folder", action: remove)
         }
-        .help("Drag tabs here to keep them in \(folder.name)")
+        .help(compact ? "\(folder.name) (\(count))" : "Drag tabs here to keep them in \(folder.name)")
     }
 }
 
@@ -363,11 +406,11 @@ struct SpaceSwitcher: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Button { spaces.sidebarShown = false } label: {
+            Button { spaces.sidebarMode = .rail } label: {
                 Image(systemName: "sidebar.left")
             }
             .buttonStyle(.borderless)
-            .help("Hide Sidebar (⌘S)")
+            .help("Narrow the Sidebar to Icons (⌘S)")
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     ForEach(Array(spaces.states.enumerated()), id: \.element.space.id) { index, state in
@@ -389,6 +432,63 @@ struct SpaceSwitcher: View {
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 6)
+    }
+}
+
+/// The foot of the rail: a running download's progress, the Space dots
+/// stacked, and a button back to the full sidebar.
+struct RailFooter: View {
+    @ObservedObject var spaces: SpaceStore
+    @ObservedObject private var downloads = Downloads.shared
+
+    var body: some View {
+        VStack(spacing: 8) {
+            if let running = downloads.items.first(where: { $0.state == .running }) {
+                RailDownload(item: running) { spaces.sidebarMode = .full }
+            }
+            Divider()
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 8) {
+                    ForEach(Array(spaces.states.enumerated()), id: \.element.space.id) { index, state in
+                        SpaceDot(state: state, number: index + 1, selected: state.space.id == spaces.selected,
+                                 showNumber: spaces.numbersShown == .spaces && index < 9) {
+                            spaces.select(state.space.id)
+                        }
+                        .contextMenu { SpaceMenuItems(spaces: spaces, id: state.space.id) }
+                    }
+                }
+                // Room for the selected Space's ring and the sound badge.
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            Button { spaces.sidebarMode = .full } label: { Image(systemName: "sidebar.left") }
+                .buttonStyle(.borderless)
+                .help("Show the Full Sidebar (⌘S)")
+        }
+        .padding(.bottom, 10)
+    }
+}
+
+/// A download in progress, as a ring in the rail. Click for the full list.
+struct RailDownload: View {
+    @ObservedObject var item: Download
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 2.5)
+                Circle().trim(from: 0, to: item.fraction ?? 0)
+                    .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Image(systemName: "arrow.down").font(.system(size: 8, weight: .bold))
+            }
+            .frame(width: 20, height: 20)
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 6)
+        .help("Downloading \(item.name)")
     }
 }
 
@@ -461,20 +561,82 @@ struct TabRow: View {
     let resetPermissions: (String) -> Void
     /// Its ⌘ number, while ⌘ is held.
     var number: Int? = nil
+    /// In the rail: the favicon alone, its title on hover.
+    var compact = false
     @State private var hovering = false
     @State private var dropZone: TabDropZone?
     @State private var rowHeight: CGFloat = 30
 
-    var body: some View {
-        HStack(spacing: 8) {
-            Group {
-                if let favicon = tab.favicon {
-                    Image(nsImage: favicon).resizable().interpolation(.high)
-                } else {
-                    Image(systemName: "globe").foregroundStyle(.secondary)
+    private var icon: some View {
+        Group {
+            if let favicon = tab.favicon {
+                Image(nsImage: favicon).resizable().interpolation(.high)
+            } else {
+                Image(systemName: "globe").foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 16, height: 16)
+    }
+
+    /// The rail's version: a sleeping pin faded, a dot for sound (a slashed
+    /// speaker when muted) and a mark for the right side of a split.
+    private var railIcon: some View {
+        icon
+            .opacity(tab.isAsleep ? 0.45 : 1)
+            .overlay(alignment: .topTrailing) {
+                if tab.isMuted {
+                    Image(systemName: "speaker.slash.fill").font(.system(size: 7, weight: .bold))
+                        .offset(x: 6, y: -5)
+                } else if tab.isPlayingAudio {
+                    Circle().fill(Color.accentColor).frame(width: 6, height: 6).offset(x: 4, y: -3)
                 }
             }
-            .frame(width: 16, height: 16)
+            .overlay(alignment: .bottomTrailing) {
+                if inSplit {
+                    Image(systemName: "rectangle.righthalf.inset.filled").font(.system(size: 7))
+                        .foregroundStyle(.secondary).offset(x: 6, y: 4)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .help(tab.displayTitle)
+    }
+
+    var body: some View {
+        Group {
+            if compact { railIcon } else { row }
+        }
+        // One height whatever's showing, so hovering (pin, close) or a
+        // sound starting doesn't nudge every tab below.
+        .frame(height: 20)
+        // Room to breathe between tabs.
+        .padding(.vertical, 5)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        // Drag this tab onto another's middle to open them in a split view,
+        // or to its top or bottom edge to move it there.
+        .draggable(tab.id.uuidString)
+        .background(GeometryReader { geometry in
+            Color.clear.onAppear { rowHeight = geometry.size.height }
+                .onChange(of: geometry.size.height) { _, height in rowHeight = height }
+        })
+        .onDrop(of: [.text], delegate: TabDropDelegate(height: rowHeight, zone: $dropZone) { dropTab($0, $1) })
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(dropZone == .onto ? 0.3 : 0)))
+        .overlay(alignment: dropZone == .after ? .bottom : .top) {
+            if dropZone == .before || dropZone == .after {
+                Capsule().fill(Color.accentColor).frame(height: 2).offset(y: dropZone == .after ? 1 : -1)
+                    .allowsHitTesting(false)
+            }
+        }
+        .overlay(alignment: compact ? .center : .trailing) {
+            if let number { ShortcutBadge(text: "⌘\(number)") }
+        }
+        .animation(.easeOut(duration: 0.12), value: number)
+        .contextMenu { menu }
+    }
+
+    private var row: some View {
+        HStack(spacing: 8) {
+            icon
             Text(tab.displayTitle).lineLimit(1)
                 .help(tab.address)
                 // A sleeping pin: not loaded until you go to it.
@@ -506,77 +668,52 @@ struct TabRow: View {
                     .help(tab.isPinned ? "Put to sleep (stays pinned)" : "Close Tab")
             }
         }
-        // One height whatever's showing, so hovering (pin, close) or a
-        // sound starting doesn't nudge every tab below.
-        .frame(height: 20)
-        // Room to breathe between tabs.
-        .padding(.vertical, 5)
-        .contentShape(Rectangle())
-        .onHover { hovering = $0 }
-        // Drag this tab onto another's middle to open them in a split view,
-        // or to its top or bottom edge to move it there.
-        .draggable(tab.id.uuidString)
-        .background(GeometryReader { geometry in
-            Color.clear.onAppear { rowHeight = geometry.size.height }
-                .onChange(of: geometry.size.height) { _, height in rowHeight = height }
-        })
-        .onDrop(of: [.text], delegate: TabDropDelegate(height: rowHeight, zone: $dropZone) { dropTab($0, $1) })
-        .background(RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(dropZone == .onto ? 0.3 : 0)))
-        .overlay(alignment: dropZone == .after ? .bottom : .top) {
-            if dropZone == .before || dropZone == .after {
-                Capsule().fill(Color.accentColor).frame(height: 2).offset(y: dropZone == .after ? 1 : -1)
-                    .allowsHitTesting(false)
-            }
+    }
+
+    @ViewBuilder private var menu: some View {
+        Button("Copy Link") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(tab.address, forType: .string)
         }
-        .overlay(alignment: .trailing) {
-            if let number { ShortcutBadge(text: "⌘\(number)") }
+        .disabled(tab.address.isEmpty)
+        Button(tab.isMuted ? "Unmute Tab" : "Mute Tab", action: tab.toggleMute)
+        Button("Pause Media", action: tab.pauseMedia).disabled(!tab.isPlayingAudio)
+        if let site = tab.site {
+            // Undo a mistaken "Don't Allow" (or a "yes"): camera, microphone,
+            // notifications and opening apps, for this site in this Space.
+            Button("Reset Permissions for \(site)") { resetPermissions(site) }
         }
-        .animation(.easeOut(duration: 0.12), value: number)
-        .contextMenu {
-            Button("Copy Link") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(tab.address, forType: .string)
-            }
-            .disabled(tab.address.isEmpty)
-            Button(tab.isMuted ? "Unmute Tab" : "Mute Tab", action: tab.toggleMute)
-            Button("Pause Media", action: tab.pauseMedia).disabled(!tab.isPlayingAudio)
-            if let site = tab.site {
-                // Undo a mistaken "Don't Allow" (or a "yes"): camera, microphone,
-                // notifications and opening apps, for this site in this Space.
-                Button("Reset Permissions for \(site)") { resetPermissions(site) }
-            }
-            Divider()
-            if canPin || tab.isPinned {
-                Button(tab.isPinned ? "Unpin Tab" : "Pin Tab", action: togglePin)
-                    .disabled(!tab.isPinned && !["http", "https", "file"].contains(URL(string: tab.address)?.scheme ?? ""))
-            }
-            if let pinned = tab.pinnedURL, !tab.isAsleep, tab.address != pinned.absoluteString {
-                Button("Back to Pinned Page", action: tab.returnToPin)
-                Button("Pin This Page Instead", action: repin)
-            }
-            if canPin {
-                // Folders keep saved links, so putting a tab in one pins it.
-                Menu("Move to Folder") {
-                    ForEach(folders) { folder in
-                        Button(folder.name) { moveToFolder(folder.id) }.disabled(folder.id == currentFolder)
-                    }
-                    if !folders.isEmpty { Divider() }
-                    Button("New Folder…", action: newFolder)
-                }
+        Divider()
+        if canPin || tab.isPinned {
+            Button(tab.isPinned ? "Unpin Tab" : "Pin Tab", action: togglePin)
                 .disabled(!tab.isPinned && !["http", "https", "file"].contains(URL(string: tab.address)?.scheme ?? ""))
-                if currentFolder != nil {
-                    Button("Remove from Folder") { moveToFolder(nil) }
-                }
-            }
-            Divider()
-            if inSplit {
-                Button("Close Split View", action: closeSplit)
-            } else {
-                Button("Open in Split View", action: openSplit).disabled(!canSplit)
-            }
-            Button("Open in New Window", action: popOut)
-            Button("Close Tab", action: close)
         }
+        if let pinned = tab.pinnedURL, !tab.isAsleep, tab.address != pinned.absoluteString {
+            Button("Back to Pinned Page", action: tab.returnToPin)
+            Button("Pin This Page Instead", action: repin)
+        }
+        if canPin {
+            // Folders keep saved links, so putting a tab in one pins it.
+            Menu("Move to Folder") {
+                ForEach(folders) { folder in
+                    Button(folder.name) { moveToFolder(folder.id) }.disabled(folder.id == currentFolder)
+                }
+                if !folders.isEmpty { Divider() }
+                Button("New Folder…", action: newFolder)
+            }
+            .disabled(!tab.isPinned && !["http", "https", "file"].contains(URL(string: tab.address)?.scheme ?? ""))
+            if currentFolder != nil {
+                Button("Remove from Folder") { moveToFolder(nil) }
+            }
+        }
+        Divider()
+        if inSplit {
+            Button("Close Split View", action: closeSplit)
+        } else {
+            Button("Open in Split View", action: openSplit).disabled(!canSplit)
+        }
+        Button("Open in New Window", action: popOut)
+        Button("Close Tab", action: close)
     }
 }
 

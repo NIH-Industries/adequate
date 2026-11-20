@@ -44,7 +44,7 @@ final class SpaceSwipe {
         if event.phase.contains(.ended) || event.phase.contains(.cancelled) { spaces.swipePreview = nil }
         // The glide after the fingers lift belongs to whoever owned the swipe.
         guard event.momentumPhase.isEmpty else { return owned == true ? nil : event }
-        guard let sidebar = window.sidebarFrame, sidebar.contains(event.locationInWindow) else { return event }
+        guard let sidebar = spaces.sidebarFrame(in: window), sidebar.contains(event.locationInWindow) else { return event }
         // The row of Space dots scrolls sideways once there are too many to fit: there, it scrolls.
         if owned == nil, Self.scrollsSideways(window.contentView?.superview?.hitTest(event.locationInWindow)) { owned = false }
 

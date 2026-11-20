@@ -25,7 +25,8 @@ struct AdequateCommands: Commands {
             Button("Make Adequate the Default Browser") { delegate.makeDefaultBrowser() }
         }
         CommandGroup(before: .toolbar) {
-            Button("Toggle Sidebar") { spaces.sidebarShown.toggle() }.keyboardShortcut("s")
+            Button("Toggle Sidebar") { spaces.toggleSidebar() }.keyboardShortcut("s")
+            Button("Hide Sidebar") { spaces.toggleHiddenSidebar() }.keyboardShortcut("s", modifiers: [.command, .option])
         }
         CommandMenu("Tab") {
             Button("New Tab") { spaces.current.newTab() }.keyboardShortcut("t")
@@ -142,13 +143,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.window = window
             spaces.mainWindow = window
             // There's no title bar to double-click, so the top of the sidebar stands in.
-            titlebarDoubleClick = TitlebarDoubleClick(window: window)
+            titlebarDoubleClick = TitlebarDoubleClick(window: window, spaces: spaces)
             // Swipe sideways on the sidebar to change Space.
             spaceSwipe = SpaceSwipe(window: window, spaces: spaces)
-            // With the sidebar hidden they'd sit on the page, so they go too.
-            sidebarWatch = spaces.$sidebarShown.sink { [weak window] shown in
+            // With the sidebar hidden they'd sit on the page, and the rail is
+            // too narrow for them, so they only show with the full sidebar.
+            sidebarWatch = spaces.$sidebarMode.sink { [weak window] mode in
                 for kind in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
-                    window?.standardWindowButton(kind)?.isHidden = !shown
+                    window?.standardWindowButton(kind)?.isHidden = mode != .full
                 }
             }
         }

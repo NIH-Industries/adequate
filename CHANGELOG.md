@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### A rail instead of a hidden sidebar
+⌘S now narrows the sidebar to a rail of icons rather than hiding it: just
+the Space's emoji at the top, a favicon for each tab (hover for its title),
+folders as icons with their tabs marked by a bar in the Space's colour, and
+the Space dots stacked at the foot. Everything still works there: click to
+switch, drag to reorder or split, right-click for the tab's menu, hold ⌘
+for its number. Adequate remembers whether you left it full or narrow.
+⌥⌘S hides it altogether, and the round button that floated over the page's
+corner while it was hidden is gone.
+
 ### Calls you can hear the first time
 A site you've let use your camera or microphone may now play sound without
 a click, from the moment you say yes and on every page of it you load after.

@@ -682,8 +682,12 @@ final class SpaceStore: ObservableObject {
     @Published var selected: Space.ID
     /// The Space dialog showing, if any.
     @Published var prompt: SpacePrompt?
-    /// Whether the sidebar of tabs and Spaces is showing (⌘S).
-    @Published var sidebarShown = true
+    /// The sidebar of tabs and Spaces: full, a rail of icons (⌘S between the
+    /// two, remembered across restarts), or hidden (⌥⌘S).
+    @Published var sidebarMode: SidebarMode = SidebarMode.saved {
+        didSet { if sidebarMode != .hidden { SidebarMode.saved = sidebarMode } }
+    }
+    var sidebarShown: Bool { sidebarMode == .full }
     /// A brief message at the bottom of the window, like "Copied link".
     @Published var toast: String?
     /// While two fingers swipe the sidebar: the Space it's heading for, and how
@@ -1034,7 +1038,8 @@ final class SpaceStore: ObservableObject {
         case ([.command], "t"): current.newTab()
         case ([.command], "w"): return current.closeSelected() ? nil : event
         case ([.command], "l"): tab?.focusRequest += 1
-        case ([.command], "s"): sidebarShown.toggle()
+        case ([.command], "s"): toggleSidebar()
+        case ([.command, .option], "s"): toggleHiddenSidebar()
         case ([.command], "\\"): current.toggleSplit()
         case ([.command], "r"): tab?.reload()
         case ([.command], "f"): tab?.showFind()
@@ -1143,5 +1148,43 @@ final class SitePermissions {
     func mayCapture(site: String) -> Bool {
         [WKMediaCaptureType.camera, .microphone, .cameraAndMicrophone]
             .contains { allowed.contains("\(site) \($0.rawValue)") }
+    }
+}
+
+/// How much of the sidebar shows. The rail is a narrow column of the current
+/// Space's emoji, a favicon per tab and the Space dots, with no titles.
+enum SidebarMode: String {
+    case full, rail, hidden
+
+    /// Wide enough for a favicon with room for its badges.
+    static let railWidth: CGFloat = 52
+
+    /// Full or rail, whichever you last left it as. Hidden isn't kept.
+    @MainActor static var saved: SidebarMode {
+        get { UserDefaults.standard.string(forKey: "SidebarMode").flatMap(Self.init) ?? .full }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "SidebarMode") }
+    }
+}
+
+extension SpaceStore {
+    /// ⌘S: between the full sidebar and the rail (and back from hidden).
+    func toggleSidebar() {
+        sidebarMode = sidebarMode == .full ? .rail : .full
+    }
+
+    /// ⌥⌘S: out of the way entirely, for a call or a film, then back as it was.
+    func toggleHiddenSidebar() {
+        sidebarMode = sidebarMode == .hidden ? SidebarMode.saved : .hidden
+    }
+
+    /// Where the sidebar (or rail) is, in window coordinates, for swipes and
+    /// double-clicks on it. Empty while it's hidden.
+    func sidebarFrame(in window: NSWindow) -> NSRect? {
+        switch sidebarMode {
+        case .full: window.sidebarFrame
+        case .hidden: .zero
+        case .rail: NSRect(x: 0, y: 0, width: SidebarMode.railWidth,
+                           height: window.contentView?.bounds.height ?? 0)
+        }
     }
 }

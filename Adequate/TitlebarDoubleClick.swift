@@ -11,10 +11,12 @@ final class TitlebarDoubleClick {
     /// How far down from the top edge counts as the title bar.
     private static let height: CGFloat = 36
     private weak var window: NSWindow?
+    private let spaces: SpaceStore
     private var monitor: Any?
 
-    init(window: NSWindow) {
+    init(window: NSWindow, spaces: SpaceStore) {
         self.window = window
+        self.spaces = spaces
         monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
             guard let self else { return event }
             return MainActor.assumeIsolated { self.handle(event) }
@@ -42,7 +44,7 @@ final class TitlebarDoubleClick {
     /// The top of the sidebar, but not its buttons, the traffic lights or a page.
     private func isTitlebarArea(_ point: NSPoint, in window: NSWindow) -> Bool {
         // No split view to ask: the whole top edge counts (pages and controls still excluded).
-        if let sidebar = window.sidebarFrame, !sidebar.contains(point) { return false }
+        if let sidebar = spaces.sidebarFrame(in: window), !sidebar.contains(point) { return false }
         var view = window.contentView?.superview?.hitTest(point)
         while let current = view {
             if current is WKWebView || current is NSControl { return false }
