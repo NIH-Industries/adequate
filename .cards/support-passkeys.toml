@@ -4,19 +4,25 @@ description = """
 Passkeys (WebAuthn) don't work in Adequate: WKWebView only runs navigator.credentials for any site when the app has Apple's permission, and the ad-hoc signed build has none. For now, sign in with credentials copied from 1Password or Authy.
 
 ## Blocked on
-- Apple Developer Program membership (same blocker as the Homebrew cask).
+- Apple approving the managed entitlement com.apple.developer.web-browser.public-key-credential, requested 2026-11-19. Apple emails the account's address when it decides; until then, developer.apple.com › Certificates, Identifiers & Profiles › Identifiers › com.nih-industries.adequate › Additional Capabilities shows it once granted. No set turnaround.
 
 ## What it takes
-1. Request the managed entitlement com.apple.developer.web-browser.public-key-credential from Apple. It's for apps that act as browsers (Adequate can be the default browser). Apple has to approve it and add it to a provisioning profile.
-2. Developer ID signing with that profile embedded, plus hardened runtime (part of the make release work). Keep the camera and microphone entitlements or video calls break.
-3. Then WebKit's own WebAuthn should use the system passkey sheet: iCloud Keychain, 1Password as a passkey provider, phone via QR code, and security keys. Probably little or no WebAuthn code of our own. ASAuthorizationWebBrowserPublicKeyCredentialManager is there if we ever want our own account picker.
+1. Once granted: tick the capability on the App ID, then make a Developer ID provisioning profile for com.nih-industries.adequate that includes it.
+2. Embed the profile (Contents/embedded.provisionprofile) and add the entitlement, with hardened runtime, in `make release`. Keep the camera and microphone entitlements or video calls break.
+3. Everyday builds: the same Developer ID profile isn't tied to particular Macs, so `make build` can embed it too when the Developer ID is in the keychain, and passkeys work while developing.
+4. Then WebKit's own WebAuthn should use the system passkey sheet: iCloud Keychain, 1Password as a passkey provider, phone via QR code, and security keys. Probably little or no WebAuthn code of our own. ASAuthorizationWebBrowserPublicKeyCredentialManager is there if we ever want our own account picker.
+
+## Other people building Adequate
+- The entitlement belongs to Mark's team and App ID. A restricted entitlement signed without a matching profile stops the app launching, so it must only go in when signing with Mark's identity and profile, like the Makefile's SIGN fallback: ad-hoc builds leave it out and simply have no passkeys.
+- An individual membership can't add team members, so others can't sign as Mark's team. They'd either live without passkeys, or use their own team, bundle id and entitlement request. An Organization membership (needs a legal entity and D-U-N-S) is the only way to share signing.
+- Releases are built and notarised on Mark's Mac.
 
 ## Notes
 - Passkeys live in the keychain or 1Password, not a Space's cookie store, so every Space sees the same passkeys. Logins stay per Space.
-- Untested: not yet checked against a real signed build. The open question is whether Apple grants the entitlement to a one-person indie browser.
+- Untested: not yet checked against a real signed build.
 - Without the entitlement, WebAuthn works only for domains claimed through webcredentials associated domains, which means our own sites only."""
 created_at = "2026-11-16T20:59:33.599731Z"
-updated_at = "2026-11-16T20:59:33.599731Z"
+updated_at = "2026-11-20T03:07:56.953067Z"
 tags = [
     "idea",
     "auth",
