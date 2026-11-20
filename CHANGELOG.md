@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Calls you can hear the first time
+A site you've let use your camera or microphone may now play sound without
+a click, from the moment you say yes and on every page of it you load after.
+Joining a Google Meet sometimes left you hearing no one until you reloaded,
+because WebKit's autoplay rules had turned the call's audio away.
+
 ### Builds that keep their permissions
 `make build` and `make install` sign Adequate with your Developer ID when
 it's in your keychain, so macOS sees each rebuild as the same app and your

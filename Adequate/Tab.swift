@@ -369,8 +369,25 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
             detail: Self.rememberNote,
             buttons: ["Allow", "Don't Allow"], defaultButton: 1) { [weak self] choice in
             self?.remember(key, allowed: choice == 0)
+            if choice == 0 { self?.allowAutoplay() }
             decisionHandler(choice == 0 ? .grant : .deny)
         }
+    }
+
+    /// A site you let use the camera or microphone may play sound without a
+    /// click: a call's voices come through <audio> elements, and WebKit's
+    /// autoplay rules sometimes refuse them, leaving a call you join silent.
+    /// Private, like Safari's per-site Auto-Play setting: if it goes, calls
+    /// are just as they were. This page gets it now; later ones as they load.
+    private static let autoplayAllowed = 1 // _WKWebsiteAutoplayPolicyAllow
+
+    private func allowAutoplay() {
+        let update = Selector(("_updateWebpagePreferences:"))
+        let preferences = WKWebpagePreferences()
+        guard preferences.responds(to: Selector(("_setAutoplayPolicy:"))),
+              webView.responds(to: update) else { return }
+        preferences.setValue(Self.autoplayAllowed, forKey: "autoplayPolicy")
+        webView.perform(update, with: preferences)
     }
 
     /// A page wants to know where you are (PageLocation): asked once per site
@@ -552,21 +569,27 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     // MARK: WKNavigationDelegate
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
-                 decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
-        guard let url = navigationAction.request.url else { return decisionHandler(.allow) }
+                 preferences: WKWebpagePreferences,
+                 decisionHandler: @escaping @MainActor (WKNavigationActionPolicy, WKWebpagePreferences) -> Void) {
+        guard let url = navigationAction.request.url else { return decisionHandler(.allow, preferences) }
         // mailto:, zoommtg:, slack: and friends belong to other apps.
         if let scheme = url.scheme, !["http", "https", "file", "about", "data", "blob", "javascript"].contains(scheme) {
             openInOtherApp(url, scheme: scheme)
-            return decisionHandler(.cancel)
+            return decisionHandler(.cancel, preferences)
         }
         // <a download>: save it, even if WebKit could show it.
-        if navigationAction.shouldPerformDownload { return decisionHandler(.download) }
+        if navigationAction.shouldPerformDownload { return decisionHandler(.download, preferences) }
         if navigationAction.navigationType == .linkActivated,
            navigationAction.modifierFlags.contains(.command) {
             onOpenInBackground?(url)
-            return decisionHandler(.cancel)
+            return decisionHandler(.cancel, preferences)
         }
-        decisionHandler(.allow)
+        if navigationAction.targetFrame?.isMainFrame ?? true,
+           let host = url.host, permissions?.mayCapture(site: url.port.map { "\(host):\($0)" } ?? host) == true,
+           preferences.responds(to: Selector(("_setAutoplayPolicy:"))) {
+            preferences.setValue(Self.autoplayAllowed, forKey: "autoplayPolicy")
+        }
+        decisionHandler(.allow, preferences)
     }
 
     /// What WebKit can't show (a zip, a dmg), or what the server says to

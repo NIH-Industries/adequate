@@ -1137,4 +1137,11 @@ final class SitePermissions {
     func forget(site: String) {
         allowed = allowed.filter { !$0.hasPrefix("\(site) ") }
     }
+
+    /// Whether the site may use the camera or microphone (keys end in a
+    /// WKMediaCaptureType's raw value).
+    func mayCapture(site: String) -> Bool {
+        [WKMediaCaptureType.camera, .microphone, .cameraAndMicrophone]
+            .contains { allowed.contains("\(site) \($0.rawValue)") }
+    }
 }

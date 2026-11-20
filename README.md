@@ -31,7 +31,8 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
   Space's dot gets one too. Tab › Pause All Media hushes everything.
 - **Video calls**: pages can use the camera and microphone once you allow
   them (asked once per site per Space, until Adequate quits), and share a
-  window or the whole screen. To share one tab, right-click it and choose
+  window or the whole screen. A site you've allowed may play sound without
+  a click, so a call you join isn't silent. To share one tab, right-click it and choose
   Open in New Window, then pick that window.
 - **Location**: pages like maps can ask where you are, asked the same way
   as the camera (once per site per Space, until Adequate quits). macOS asks
