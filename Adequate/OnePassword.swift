@@ -37,6 +37,14 @@ enum OnePassword {
         let message: String
     }
 
+    /// The site the logins were chosen for, which the frame must still be
+    /// showing when they're filled.
+    struct Site {
+        let scheme: String
+        let host: String
+        let port: String
+    }
+
     /// Where Homebrew and 1Password's installer put it: an app doesn't get your shell's PATH.
     static var tool: URL? {
         ["/opt/homebrew/bin/op", "/usr/local/bin/op"]
@@ -260,7 +268,12 @@ enum OnePassword {
 
     /// Runs in the focused frame's isolated world. Fills a one-time code into
     /// a code field, or the username and password around the focused field.
+    /// First it checks the frame is still at the site the login was chosen
+    /// for, in the same step as filling, so a page can't swap in between.
     static let fill = """
+        if (location.protocol !== `${scheme}:`.toLowerCase()
+            || location.hostname.toLowerCase() !== host.toLowerCase()
+            || location.port !== port) return 'moved';
         const visible = el => !el.disabled && !el.readOnly && el.getClientRects().length > 0
           && getComputedStyle(el).visibility !== 'hidden';
         const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
@@ -325,6 +338,10 @@ extension Tab {
         let origin = frame?.securityOrigin
         guard let host = origin?.host ?? webView.url?.host(), !host.isEmpty else { return }
         let scheme = origin?.protocol ?? webView.url?.scheme ?? ""
+        let port = origin.map { $0.port == 0 ? "" : String($0.port) } ?? webView.url?.port.map(String.init) ?? ""
+        // The fill checks the frame still shows this site: it may have moved
+        // on since you clicked into it, or while 1Password was busy.
+        let site = OnePassword.Site(scheme: scheme, host: host, port: port)
         // Never send a password in the clear (localhost excepted, for development).
         guard scheme == "https" || host == "localhost" || host == "127.0.0.1" else {
             return toast("Not filling: \(host) isn't using HTTPS")
@@ -340,8 +357,8 @@ extension Tab {
                 toast("")
                 switch logins.count {
                 case 0: toast("No 1Password login for \(host)")
-                case 1: fill(logins[0], into: frame, toast: toast)
-                default: choose(from: logins) { self.fill($0, into: frame, toast: toast) }
+                case 1: fill(logins[0], into: frame, at: site, toast: toast)
+                default: choose(from: logins) { self.fill($0, into: frame, at: site, toast: toast) }
                 }
             } catch {
                 toast((error as? OnePassword.Failure)?.message ?? error.localizedDescription)
@@ -370,14 +387,17 @@ extension Tab {
         menu.popUp(positioning: menu.items.first, at: NSPoint(x: webView.bounds.midX - 120, y: y), in: webView)
     }
 
-    private func fill(_ login: OnePassword.Login, into frame: WKFrameInfo?, toast: @escaping (String) -> Void) {
+    private func fill(_ login: OnePassword.Login, into frame: WKFrameInfo?, at site: OnePassword.Site,
+                      toast: @escaping (String) -> Void) {
         Task {
             do {
                 let secrets = try await OnePassword.secrets(for: login)
                 let result = try await webView.callAsyncJavaScript(
                     OnePassword.fill,
-                    arguments: ["username": secrets.username, "password": secrets.password, "otp": secrets.otp],
+                    arguments: ["username": secrets.username, "password": secrets.password, "otp": secrets.otp,
+                                "scheme": site.scheme, "host": site.host, "port": site.port],
                     in: frame, contentWorld: .defaultClient) as? String
+                if result == "moved" { return toast("Not filling: the page is no longer \(site.host)") }
                 if result == "nothing" { return toast("No login fields to fill here") }
                 // The code wasn't filled: it's what the next page will ask for.
                 if result != "otp", !secrets.otp.isEmpty {

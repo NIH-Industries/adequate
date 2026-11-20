@@ -22,7 +22,8 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
   Use Adequate › Make Adequate the Default Browser.
 - **No extensions**: WKWebView apps can't load them. Logins come from
   1Password through its CLI instead: ⌘⇧P lists the logins saved for the site
-  you're on, in every 1Password account (that site and its subdomains only, so a lookalike gets nothing)
+  you're on, in every 1Password account (that site and its subdomains only, so a lookalike gets nothing,
+  and only while the field is still on that site)
   and fills the one you pick, or a one-time code into a code field (otherwise
   the code is copied, and cleared a minute later). Needs `op` (`brew install
   1password-cli`) and 1Password › Settings › Developer › Integrate with

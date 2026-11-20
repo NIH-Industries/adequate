@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### 1Password fills only the site it chose for
+⌘⇧P checks, as it fills, that the field is still on the site whose logins
+it offered. Before, a page could swap the frame you'd clicked into for
+another site's (after you clicked, or while 1Password was unlocking), and
+the login went there. Now it says "Not filling: the page is no longer …"
+instead.
+
 ### Tab numbers that count
 Holding ⌘ shows each tab's real number while a Space has nine tabs or
 fewer, so the only tab is ⌘1 rather than ⌘9. ⌘9 still goes to the last
