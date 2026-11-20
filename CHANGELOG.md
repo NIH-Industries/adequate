@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-11-20
+
 ### A rail instead of a hidden sidebar
 ⌘S now narrows the sidebar to a rail of icons rather than hiding it: just
 the Space's emoji at the top, a favicon for each tab (hover for its title),
