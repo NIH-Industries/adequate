@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.1 - 2026-11-21
+
 ### 1Password fills only the site it chose for
 ⌘⇧P checks, as it fills, that the field is still on the site whose logins
 it offered. Before, a page could swap the frame you'd clicked into for
