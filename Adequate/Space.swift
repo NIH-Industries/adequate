@@ -516,8 +516,10 @@ final class SpaceState: ObservableObject {
     var tabNumbers: [Tab.ID: Int] {
         let tabs = sidebarTabs
         var numbers: [Tab.ID: Int] = [:]
-        for (index, tab) in tabs.prefix(8).enumerated() { numbers[tab.id] = index + 1 }
-        if let last = tabs.last { numbers[last.id] = 9 }
+        // Nine or fewer: each by its place, so one tab of one is ⌘1, not ⌘9.
+        // Beyond nine, ⌘9 is the last and those between go without.
+        for (index, tab) in tabs.prefix(tabs.count <= 9 ? 9 : 8).enumerated() { numbers[tab.id] = index + 1 }
+        if tabs.count > 9, let last = tabs.last { numbers[last.id] = 9 }
         return numbers
     }
 

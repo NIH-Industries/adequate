@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Tab numbers that count
+Holding ⌘ shows each tab's real number while a Space has nine tabs or
+fewer, so the only tab is ⌘1 rather than ⌘9. ⌘9 still goes to the last
+tab, and past nine tabs the last one shows ⌘9 as before.
+
 ## 0.2.0 - 2026-11-20
 
 ### A rail instead of a hidden sidebar

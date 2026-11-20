@@ -119,7 +119,7 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
 | ⌥⌘I | developer tools (or right-click › Inspect Element) |
 | ⌃Tab / ⌃⇧Tab | switcher of this Space's tabs, most recent first, with previews: let go of ⌃ to go there, Esc to stay |
 | ⌘⇧[ / ⌘⇧] | previous / next tab in the sidebar |
-| ⌘1–⌘8, ⌘9 | tab by position, last tab |
+| ⌘1–⌘8, ⌘9 | tab by position; the last tab (its own number while there are nine or fewer) |
 | ⌃1–⌃9 | Space by position |
 | hold ⌘ / ⌃ | show each tab's / Space's number |
 | fn⌃F | fill the screen with the window (macOS's own Window › Fill) |
