@@ -1064,6 +1064,7 @@ final class SpaceStore: ObservableObject {
             case ([.command], "]"): popped.goForward()
             case ([.command, .option], "i"): popped.showDeveloperTools()
             case ([.command, .shift], "p"): fillFromOnePassword(in: popped)
+            case ([.command], "p"): popped.printPage()
             default: return event
             }
             return nil
@@ -1080,6 +1081,7 @@ final class SpaceStore: ObservableObject {
         case ([.command], "t"): current.newTab()
         case ([.command, .shift], "t"): current.reopenClosedTab()
         case ([.command], "w"): return current.closeSelected() ? nil : event
+        case ([.command], "p"): tab?.printPage()
         case ([.command], "l"): tab?.focusRequest += 1
         case ([.command], "s"): toggleSidebar()
         case ([.command, .option], "s"): toggleHiddenSidebar()

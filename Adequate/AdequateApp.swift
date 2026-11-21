@@ -33,6 +33,7 @@ struct AdequateCommands: Commands {
             Button("Close Tab") { _ = spaces.current.closeSelected() }.keyboardShortcut("w")
             Button("Reopen Closed Tab") { spaces.current.reopenClosedTab() }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
+            Button("Print…") { spaces.current.activeTab?.printPage() }.keyboardShortcut("p")
             Divider()
             Button("Open Location") { spaces.current.activeTab?.focusRequest += 1 }.keyboardShortcut("l")
             Button("Copy Link") { spaces.copyCurrentLink() }.keyboardShortcut("c", modifiers: [.command, .shift])

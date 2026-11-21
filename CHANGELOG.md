@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Print and save as PDF
+⌘P (Tab › Print…) prints the page, and the print panel's PDF menu saves it
+as a PDF. Pages' own Print buttons (window.print()) work too.
+
 ### Reopen closed tabs
 ⌘⇧T (Tab › Reopen Closed Tab) brings back the tab you just closed, in its
 Space and at its place in the sidebar. Again for the one before, up to 20 per

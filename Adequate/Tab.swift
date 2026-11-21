@@ -376,6 +376,37 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
             completionHandler(choice == 0)
         }
     }
+
+    // MARK: Printing
+
+    /// ⌘P: the print panel as a sheet, whose PDF menu also saves as PDF.
+    func printPage() {
+        guard let window = webView.window, !isBlank else { return }
+        let info = (NSPrintInfo.shared.copy() as? NSPrintInfo) ?? NSPrintInfo.shared
+        info.horizontalPagination = .fit
+        info.verticalPagination = .automatic
+        info.isHorizontallyCentered = true
+        info.isVerticallyCentered = false
+        let operation = webView.printOperation(with: info)
+        // WebKit's print view comes unsized, which prints blank pages.
+        operation.view?.frame = webView.bounds
+        operation.jobTitle = displayTitle
+        operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
+    }
+
+    /// window.print() from the page: WebKit's private delegate methods (older
+    /// and newer WebKit), handled as ⌘P is.
+    @objc(_webView:printFrame:)
+    func webView(_ webView: WKWebView, printFrame frame: AnyObject) {
+        printPage()
+    }
+
+    @objc(_webView:printFrame:pdfFirstPageSize:completionHandler:)
+    func webView(_ webView: WKWebView, printFrame frame: AnyObject, pdfFirstPageSize size: CGSize,
+                 completionHandler: @escaping () -> Void) {
+        printPage()
+        completionHandler()
+    }
     func goBack() { webView.goBack() }
 
     // MARK: Sound
