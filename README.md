@@ -87,6 +87,9 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
 - **Crashed pages**: a tab whose page crashed reloads, at once if it's on
   screen or when you next go to it. One that crashes again straight away
   says so and waits for Try Again (or ⌘R).
+- **Unsaved changes**: a page with something unsaved can ask "Leave this
+  page?" before ⌘W, the close button, a reload or a link takes it away.
+  Return picks Stay. Quitting and closing a whole Space don't ask.
 - **Split view**: two tabs side by side (⌘\\, or drag one tab onto the middle of another,
   or right-click › Open in Split View). Click a pane to use it: it gets the
   Space's colour, and shortcuts, ⌘W and the site name act on it. Clicking

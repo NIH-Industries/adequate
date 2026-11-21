@@ -105,6 +105,10 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     private var recoveredAt: Date?
     /// It crashed again straight after coming back: the tab says so and waits.
     @Published private(set) var keepsCrashing = false
+    /// ⌘W or the close button asked for this tab to go (not the page itself).
+    private(set) var closeRequested = false
+    /// The page's "Leave this page?" is showing.
+    private var askingToLeave = false
     /// Frames that have told MediaWatch about their media, by the id each
     /// page's script picks, and which of them are playing sound.
     private var mediaFrames: [String: WKFrameInfo] = [:]
@@ -331,6 +335,46 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
         keepsCrashing = false
         needsRecovery = true
         recover()
+    }
+
+    // MARK: Closing
+
+    /// ⌘W or the close button: the page gets its say first (an unsent draft's
+    /// "Leave this page?"), then onClose closes the tab. WebKit's private
+    /// _tryClose runs the page's beforeunload, as Safari does; without it,
+    /// or for a page that isn't running, the tab just closes.
+    func requestClose() {
+        closeRequested = true
+        let tryClose = Selector(("_tryClose"))
+        guard !isAsleep, !isBlank, !needsRecovery, !keepsCrashing, webView.responds(to: tryClose) else {
+            onClose?()
+            return
+        }
+        typealias TryClose = @convention(c) (AnyObject, Selector) -> Bool
+        let closedNow = unsafeBitCast(webView.method(for: tryClose), to: TryClose.self)(webView, tryClose)
+        if closedNow { return onClose?() ?? () }
+        // Otherwise WebKit calls webViewDidClose once the page agrees. A page
+        // that's hung never answers: close it anyway if it hasn't asked.
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard let self, closeRequested, !askingToLeave else { return }
+            onClose?()
+        }
+    }
+
+    /// A page with unsaved changes (beforeunload) is being closed, reloaded or
+    /// left. WebKit's private delegate method; there's no public one.
+    @objc(_webView:runBeforeUnloadConfirmPanelWithMessage:initiatedByFrame:completionHandler:)
+    func webView(_ webView: WKWebView, runBeforeUnloadConfirmPanelWithMessage message: String,
+                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
+        askingToLeave = true
+        ask("Leave this page?",
+            detail: "\(Self.site(frame.securityOrigin)) says changes you made may not be saved.",
+            buttons: ["Leave", "Stay"], defaultButton: 1) { [weak self] choice in
+            self?.askingToLeave = false
+            if choice != 0 { self?.closeRequested = false }
+            completionHandler(choice == 0)
+        }
     }
     func goBack() { webView.goBack() }
 

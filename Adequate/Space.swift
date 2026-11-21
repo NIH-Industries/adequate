@@ -628,11 +628,16 @@ final class SpaceState: ObservableObject {
         return tab
     }
 
-    /// Closes the tab you're using: the active pane's.
+    /// Closes the tab you're using: the active pane's, once its page agrees.
     func closeSelected() -> Bool {
-        guard let id = activeTab?.id else { return false }
-        close(id)
+        guard let tab = activeTab else { return false }
+        tab.requestClose()
         return true
+    }
+
+    /// The sidebar's close button: the page gets its say first.
+    func requestClose(_ id: Tab.ID) {
+        tabs.first { $0.id == id }?.requestClose()
     }
 
     /// One step of ⌃Tab while Control is held. This only moves the switcher's

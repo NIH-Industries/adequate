@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### "Leave this page?" before losing changes
+A page with unsaved changes (a half-written email, a form) can now ask before
+it goes: "Leave this page?" with Stay as the safe answer. That covers ⌘W and
+the close button as well as reloading and following links.
+
 ### Crashed tabs come back
 When a page's process dies (out of memory, a WebKit bug, macOS reclaiming
 memory), the tab reloads instead of sitting blank: straight away if you're

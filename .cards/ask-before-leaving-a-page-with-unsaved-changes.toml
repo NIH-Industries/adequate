@@ -1,5 +1,5 @@
 name = "Ask before leaving a page with unsaved changes"
-status = "todo"
+status = "done"
 description = """
 A page's 'Leave this page? Changes you made may not be saved' (beforeunload) never shows, so ⌘W or a reload throws away an unsent draft or half-filled form without asking.
 
@@ -11,7 +11,7 @@ A page's 'Leave this page? Changes you made may not be saved' (beforeunload) nev
 ## Notes
 - Without (3) this only protects reloads and links, not ⌘W, which is the case that matters most."""
 created_at = "2026-11-18T02:21:29.628639Z"
-updated_at = "2026-11-18T02:21:29.628639Z"
+updated_at = "2026-11-21T01:43:27.957987Z"
 tags = [
     "idea",
     "pages",

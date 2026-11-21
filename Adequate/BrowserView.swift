@@ -171,7 +171,7 @@ struct Sidebar: View {
                     TabRow(tab: tab,
                            inSplit: state.splitTabID == tab.id,
                            canSplit: state.selectedTabID != tab.id,
-                           close: { state.close(tab.id) },
+                           close: { state.requestClose(tab.id) },
                            popOut: { spaces.openInNewWindow(tab.id, from: state) },
                            openSplit: { state.openSplit(with: tab.id) },
                            closeSplit: state.closeSplit,
