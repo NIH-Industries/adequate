@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### One Touch ID for a 1Password fill
+⌘⇧P could ask for Touch ID two or three times in a row for the same
+1Password account: once 1Password's session had lapsed, every request made
+at the same moment (a login's password, its one-time code, a refresh of the
+list in the background) asked on its own. Now the first request for an
+account asks and the rest wait for it, so it's one touch per account.
+
 ## 0.2.1 - 2026-11-21
 
 ### 1Password fills only the site it chose for

@@ -103,7 +103,7 @@ enum OnePassword {
                 group.addTask {
                     do {
                         let data = try await run(["item", "list", "--categories", "Login", "--format", "json",
-                                                  "--account", id])
+                                                  "--account", id], account: id)
                         let items = (try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]) ?? []
                         return .success(items.compactMap { login($0, account: id, accountName: name) })
                     } catch {
@@ -130,8 +130,8 @@ enum OnePassword {
     /// so the one-time code is its own request; an item without one fails it.
     static func secrets(for login: Login) async throws -> Secrets {
         let item = ["item", "get", login.id, "--account", login.account, "--format", "json"]
-        async let credentials = run(item + ["--fields", "username,password", "--reveal"])
-        async let code = try? run(item + ["--fields", "type=otp"])
+        async let credentials = run(item + ["--fields", "username,password", "--reveal"], account: login.account)
+        async let code = try? run(item + ["--fields", "type=otp"], account: login.account)
         var fields = try fieldList(await credentials)
         if let code = await code { fields += (try? fieldList(code)) ?? [] }
         var secrets = Secrets()
@@ -178,7 +178,13 @@ enum OnePassword {
                      account: account, accountName: accountName)
     }
 
-    private static func run(_ arguments: [String]) async throws -> Data {
+    /// One Touch ID per account: see Approval. Listing accounts needs no approval.
+    private static func run(_ arguments: [String], account: String? = nil) async throws -> Data {
+        guard let account else { return try await launch(arguments) }
+        return try await Approval.shared.run(account: account) { try await launch(arguments) }
+    }
+
+    private static func launch(_ arguments: [String]) async throws -> Data {
         guard let tool else {
             throw Failure(message: "Install the 1Password CLI (brew install 1password-cli) to fill logins.")
         }
@@ -198,6 +204,46 @@ enum OnePassword {
                 } catch {
                     continuation.resume(throwing: error)
                 }
+            }
+        }
+    }
+
+    /// Each op that finds 1Password's session for an account lapsed asks for
+    /// Touch ID on its own, so several at once (a background refresh of the
+    /// list, a fill's two requests) meant several prompts for one account.
+    /// Until an account has recently answered, its requests go one at a
+    /// time: the first asks, the rest wait for it and then reuse the
+    /// session. If that one fails (Touch ID cancelled), the next one asks.
+    private actor Approval {
+        static let shared = Approval()
+        /// Comfortably inside 1Password's 10 minutes of idle before it asks again.
+        private static let fresh: TimeInterval = 300
+        private var answered: [String: Date] = [:]
+        private var asking: [String: Task<Void, Never>] = [:]
+
+        func run(account: String, _ work: @escaping @Sendable () async throws -> Data) async throws -> Data {
+            while true {
+                if let at = answered[account], -at.timeIntervalSinceNow < Self.fresh {
+                    do {
+                        let data = try await work()
+                        answered[account] = Date()
+                        return data
+                    } catch {
+                        // Maybe 1Password locked early: let the next request ask alone.
+                        answered[account] = nil
+                        throw error
+                    }
+                }
+                if let waiting = asking[account] {
+                    await waiting.value
+                    continue
+                }
+                let attempt = Task { try await work() }
+                asking[account] = Task { _ = try? await attempt.value }
+                defer { asking[account] = nil }
+                let data = try await attempt.value
+                answered[account] = Date()
+                return data
             }
         }
     }
