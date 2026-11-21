@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Reopen closed tabs
+⌘⇧T (Tab › Reopen Closed Tab) brings back the tab you just closed, in its
+Space and at its place in the sidebar. Again for the one before, up to 20 per
+Space. It comes back as a fresh load of its address, without its back and
+forward history. Tabs a page closed itself (a sign-in pop-up) aren't kept.
+
 ### "Leave this page?" before losing changes
 A page with unsaved changes (a half-written email, a form) can now ask before
 it goes: "Leave this page?" with Stay as the safe answer. That covers ⌘W and

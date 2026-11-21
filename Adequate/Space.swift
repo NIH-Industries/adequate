@@ -160,6 +160,9 @@ final class SpaceState: ObservableObject {
     let permissions = SitePermissions()
     /// Pages visited in this Space, for address bar suggestions.
     private(set) var history: History
+    /// Tabs closed with ⌘W or the close button, most recent last, for ⌘⇧T:
+    /// the address and where in the sidebar it was. Not kept between launches.
+    private var closedTabs: [(url: URL, index: Int)] = []
     /// Passes each tab's sound changes up, so the Space's dot can show them.
     private var soundWatches: [Tab.ID: AnyCancellable] = [:]
 
@@ -191,6 +194,7 @@ final class SpaceState: ObservableObject {
     /// Space; a kept one would just get its saved logins back.
     func forgetEverything() {
         closeAll()
+        closedTabs = []
         permissions.allowed = []
         if space.notifications != nil {
             space.notifications = nil
@@ -357,7 +361,8 @@ final class SpaceState: ObservableObject {
             self?.newTab(configuration: configuration).webView
         }
         tab.onClose = { [weak self, weak tab] in
-            if let tab { self?.close(tab.id) }
+            // A page closing itself (an OAuth pop-up) isn't one to reopen.
+            if let tab { self?.close(tab.id, remember: tab.closeRequested) }
         }
         tab.onOpenInBackground = { [weak self] url in
             self?.newTab(background: true).load(url: url)
@@ -554,8 +559,14 @@ final class SpaceState: ObservableObject {
         selectedTabID = nil
     }
 
-    func close(_ id: Tab.ID) {
+    func close(_ id: Tab.ID, remember: Bool = false) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        let tab = tabs[index]
+        if remember, !tab.isPinned, !tab.isBlank, let url = URL(string: tab.address),
+           ["http", "https", "file"].contains(url.scheme ?? "") {
+            closedTabs.append((url, index))
+            if closedTabs.count > 20 { closedTabs.removeFirst() }
+        }
         tabs[index].shutDown()
         if tabs[index].isPinned {
             leaveSleeper(at: index)
@@ -638,6 +649,19 @@ final class SpaceState: ObservableObject {
     /// The sidebar's close button: the page gets its say first.
     func requestClose(_ id: Tab.ID) {
         tabs.first { $0.id == id }?.requestClose()
+    }
+
+    /// ⌘⇧T: the last tab closed comes back where it was, as a fresh load of
+    /// its address (WebKit can't hand back its back/forward history).
+    @discardableResult
+    func reopenClosedTab() -> Bool {
+        guard let closed = closedTabs.popLast() else { return false }
+        let tab = makeTab(configuration: nil)
+        tabs.insert(tab, at: min(max(closed.index, pinnedTabs.count), tabs.count))
+        selectedTabID = tab.id
+        splitActive = false
+        tab.load(url: closed.url)
+        return true
     }
 
     /// One step of ⌃Tab while Control is held. This only moves the switcher's
@@ -1054,6 +1078,7 @@ final class SpaceStore: ObservableObject {
         }
         switch (flags, key) {
         case ([.command], "t"): current.newTab()
+        case ([.command, .shift], "t"): current.reopenClosedTab()
         case ([.command], "w"): return current.closeSelected() ? nil : event
         case ([.command], "l"): tab?.focusRequest += 1
         case ([.command], "s"): toggleSidebar()

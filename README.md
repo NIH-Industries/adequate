@@ -119,6 +119,7 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
 | key | does |
 |---|---|
 | ⌘T / ⌘W | new tab / close tab |
+| ⌘⇧T | reopen the last closed tab (a fresh load, no back history) |
 | ⌘L | address bar (it floats over the page) |
 | ⌘S | show / hide the sidebar |
 | ⌘⇧C | copy the current page's address |
