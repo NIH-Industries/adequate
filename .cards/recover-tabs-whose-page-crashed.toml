@@ -1,5 +1,5 @@
 name = "Recover tabs whose page crashed"
-status = "todo"
+status = "done"
 description = """
 When a page's web content process dies (out of memory, a WebKit bug, the Mac reclaiming memory from background tabs) the tab goes blank and stays blank until you notice and reload.
 
@@ -10,7 +10,7 @@ When a page's web content process dies (out of memory, a WebKit bug, the Mac rec
 ## Notes
 - Clear the tab's media state (sound icon) too: the process that was playing is gone."""
 created_at = "2026-11-18T02:21:29.617116Z"
-updated_at = "2026-11-18T02:21:29.617116Z"
+updated_at = "2026-11-21T01:43:23.980605Z"
 tags = [
     "idea",
     "pages",

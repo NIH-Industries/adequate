@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Crashed tabs come back
+When a page's process dies (out of memory, a WebKit bug, macOS reclaiming
+memory), the tab reloads instead of sitting blank: straight away if you're
+looking at it, or when you next go to it. A page that crashes again as soon as
+it's back gets a "This page keeps crashing" notice with Try Again, rather
+than reloading over and over.
+
 ### Sign in to password-protected sites
 Sites behind HTTP basic or digest authentication (staging sites, routers,
 some internal tools) used to just fail. Now Adequate asks for a user name and

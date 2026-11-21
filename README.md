@@ -84,6 +84,9 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
 - **HTTP sign-in**: sites behind basic or digest authentication ask for a
   user name and password in a sheet naming the site. They're kept only until
   Adequate quits, never saved.
+- **Crashed pages**: a tab whose page crashed reloads, at once if it's on
+  screen or when you next go to it. One that crashes again straight away
+  says so and waits for Try Again (or ⌘R).
 - **Split view**: two tabs side by side (⌘\\, or drag one tab onto the middle of another,
   or right-click › Open in Split View). Click a pane to use it: it gets the
   Space's colour, and shortcuts, ⌘W and the site name act on it. Clicking

@@ -97,6 +97,14 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     private var locationWaiters: [(Bool) -> Void] = []
     /// The frame with the field you were last in, where ⌘⇧P fills.
     var focusedFrame: WKFrameInfo?
+    /// The page's process died while the tab was out of sight: it reloads
+    /// when next shown, so a dozen background tabs don't all reload at once.
+    private(set) var needsRecovery = false
+    /// When it was last brought back, to tell a page that crashes again
+    /// straight away (and would loop) from one that crashed once.
+    private var recoveredAt: Date?
+    /// It crashed again straight after coming back: the tab says so and waits.
+    @Published private(set) var keepsCrashing = false
     /// Frames that have told MediaWatch about their media, by the id each
     /// page's script picks, and which of them are playing sound.
     private var mediaFrames: [String: WKFrameInfo] = [:]
@@ -282,7 +290,47 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     }
 
     func reload() {
+        if keepsCrashing { return tryAgain() }
         if isLoading { webView.stopLoading() } else { webView.reload() }
+    }
+
+    // MARK: Crashes
+
+    /// The page's process died (out of memory, a WebKit bug, macOS reclaiming
+    /// memory). Reload if it's on screen, or when it's next shown.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        // The process playing sound and holding frames is gone.
+        mediaFrames = [:]
+        audibleFrames = []
+        isPlayingAudio = false
+        focusedFrame = nil
+        Locator.shared.forget(webView)
+        if let recoveredAt, -recoveredAt.timeIntervalSinceNow < 10 {
+            self.recoveredAt = nil
+            keepsCrashing = true
+            return
+        }
+        needsRecovery = true
+        if webView.window != nil { recover() }
+    }
+
+    /// Shown again after crashing out of sight: load it back.
+    func recover() {
+        guard needsRecovery else { return }
+        needsRecovery = false
+        recoveredAt = .now
+        if webView.url != nil {
+            webView.reload()
+        } else if let url = URL(string: address) {
+            load(url: url)
+        }
+    }
+
+    /// The crashed-again notice's Try Again, or ⌘R.
+    func tryAgain() {
+        keepsCrashing = false
+        needsRecovery = true
+        recover()
     }
     func goBack() { webView.goBack() }
 

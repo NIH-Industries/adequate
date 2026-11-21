@@ -1155,11 +1155,16 @@ struct TabPage: View {
             .overlay(alignment: .topTrailing) {
                 if tab.findShown && !editing { FindBar(tab: tab) }
             }
+            .overlay {
+                if tab.keepsCrashing { CrashNotice(tab: tab) }
+            }
             .onAppear {
                 draft = tab.address
                 // A blank tab wants an address; one opened with a page wants
                 // the page. A sleeping pin loads now, on first sight.
                 tab.wake()
+                // It crashed while out of sight: it comes back now.
+                tab.recover()
                 if tab.isBlank { edit() } else { tab.focusPage() }
             }
             .onChange(of: tab.address) { _, address in
@@ -1431,5 +1436,23 @@ final class PageContainer: NSView {
     override func resizeSubviews(withOldSize oldSize: NSSize) {
         guard !bounds.isEmpty else { return }
         subviews.forEach { $0.frame = bounds }
+    }
+}
+
+/// Over a tab whose page crashed again as soon as it came back, rather than
+/// reloading it over and over.
+private struct CrashNotice: View {
+    @ObservedObject var tab: Tab
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle").font(.largeTitle).foregroundStyle(.secondary)
+            Text("This page keeps crashing").font(.title3)
+            Text(tab.address).font(.callout).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            Button("Try Again") { tab.tryAgain() }.keyboardShortcut(.defaultAction)
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.background)
     }
 }
