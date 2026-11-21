@@ -1,5 +1,8 @@
-BUILT := tmp/DerivedData/Build/Products/Debug/Adequate.app
-APP := $(HOME)/Applications/Adequate.app
+# Everyday builds are Adequate Dev (its own bundle id, icon and data), so they
+# sit beside the released Adequate rather than replacing it.
+BUILT := tmp/DerivedData/Build/Products/Debug/Adequate Dev.app
+APP ?= /Applications/Adequate Dev.app
+DEV_ID := com.nih-industries.adequate.dev
 CLI := tmp/bin/adequate
 BIN ?= $(HOME)/.local/bin
 LSREGISTER := /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
@@ -29,19 +32,18 @@ project:
 build: project cli
 	xcodebuild -project Adequate.xcodeproj -scheme Adequate -configuration Debug \
 	  -derivedDataPath tmp/DerivedData -quiet build
-	codesign --force --sign "$(SIGN)" --options runtime --entitlements Adequate/Adequate.entitlements $(BUILT)
+	codesign --force --sign "$(SIGN)" --options runtime --entitlements Adequate/Adequate.entitlements "$(BUILT)"
 
-# Installs to ~/Applications, the one copy macOS should open links with.
-# The build in tmp/ is unregistered so links never go to it.
+# Installs Adequate Dev to /Applications, beside the released Adequate (quitting
+# only the dev copy). The build in tmp/ is unregistered so links never go to it.
 install: build
-	-osascript -e 'quit app "Adequate"'
-	mkdir -p $(dir $(APP))
-	rsync -a --delete $(BUILT)/ $(APP)/
-	-$(LSREGISTER) -u $(BUILT) 2>/dev/null
-	$(LSREGISTER) -f $(APP)
+	-osascript -e 'quit app id "$(DEV_ID)"'
+	rsync -a --delete "$(BUILT)/" "$(APP)/"
+	-$(LSREGISTER) -u "$(BUILT)" 2>/dev/null
+	$(LSREGISTER) -f "$(APP)"
 
 run: install
-	open $(APP)
+	open "$(APP)"
 
 cli: $(CLI)
 

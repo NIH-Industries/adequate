@@ -9,7 +9,7 @@ Passkeys (WebAuthn) don't work in Adequate: WKWebView only runs navigator.creden
 ## What it takes
 1. Once granted: tick the capability on the App ID, then make a Developer ID provisioning profile for com.nih-industries.adequate that includes it.
 2. Embed the profile (Contents/embedded.provisionprofile) and add the entitlement, with hardened runtime, in `make release`. Keep the camera and microphone entitlements or video calls break.
-3. Everyday builds: the same Developer ID profile isn't tied to particular Macs, so `make build` can embed it too when the Developer ID is in the keychain, and passkeys work while developing.
+3. Everyday builds are Adequate Dev (com.nih-industries.adequate.dev), a separate app, so they get no passkeys unless that id is registered and granted the entitlement too. Try passkey changes with `make release`.
 4. Then WebKit's own WebAuthn should use the system passkey sheet: iCloud Keychain, 1Password as a passkey provider, phone via QR code, and security keys. Probably little or no WebAuthn code of our own. ASAuthorizationWebBrowserPublicKeyCredentialManager is there if we ever want our own account picker.
 
 ## Other people building Adequate

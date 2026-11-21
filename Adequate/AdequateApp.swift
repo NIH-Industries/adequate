@@ -129,7 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),
                 styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                 backing: .buffered, defer: false)
-            window.title = "Adequate"
+            window.title = AppIdentity.name
             // The page goes right up to the top edge; the traffic lights sit
             // over the sidebar, and the sidebar's empty space drags the window.
             window.titlebarAppearsTransparent = true
@@ -162,7 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let text = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
               let url = URL(string: text) else { return }
         switch url.scheme?.lowercased() {
-        case "adequate": spaces.handle(url)
+        case AppIdentity.scheme: spaces.handle(url)
         case "http", "https": spaces.openExternal(url)
         default: break
         }

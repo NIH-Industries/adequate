@@ -136,6 +136,14 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
 Needs Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
 
 ```sh
-make run          # build, install to ~/Applications and open
+make run          # build Adequate Dev, install to /Applications and open
 make install-cli  # link the adequate CLI into ~/.local/bin
 ```
+
+Builds from source are **Adequate Dev**: a separate app from the released
+Adequate, with its own bundle id (`com.nih-industries.adequate.dev`), an
+orange DEV ribbon on its icon, and its own Spaces, logins and settings. So
+you can live in the released app (`brew install nih-industries/tap/adequate`)
+and try changes in Adequate Dev beside it. Adequate Dev has no passkeys:
+Apple's passkey entitlement belongs to the released app. The `adequate` CLI
+always talks to the released app.

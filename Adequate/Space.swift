@@ -674,11 +674,22 @@ final class SpaceState: ObservableObject {
     }
 }
 
+/// Which Adequate this is: the released app, or Adequate Dev (make build),
+/// which keeps its own data and CLI scheme so the two can sit side by side.
+enum AppIdentity {
+    /// "Adequate", or "Adequate Dev".
+    static let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Adequate"
+    /// "adequate", or "adequate-dev": what the CLI's links use.
+    static let scheme = Bundle.main.object(forInfoDictionaryKey: "AdequateURLScheme") as? String ?? "adequate"
+    /// Application Support/Adequate (where the CLI looks), or Application Support/Adequate Dev.
+    static let folder = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Application Support").appendingPathComponent(name)
+}
+
 @MainActor
 final class SpaceStore: ObservableObject {
     /// Where the Spaces are kept, so the `adequate` CLI can list them too.
-    static let file = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Application Support/Adequate/spaces.json")
+    static let file = AppIdentity.folder.appendingPathComponent("spaces.json")
 
     @Published private(set) var states: [SpaceState]
     @Published var selected: Space.ID
@@ -766,7 +777,7 @@ final class SpaceStore: ObservableObject {
     /// url as a new tab in that Space, creating the Space if needed, and shows
     /// the last one.
     func handle(_ url: URL) {
-        guard url.scheme == "adequate", url.host() == "open",
+        guard url.scheme?.lowercased() == AppIdentity.scheme, url.host() == "open",
               let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
               items.first(where: { $0.name == "token" })?.value == CLIToken.value,
               let name = items.first(where: { $0.name == "space" })?.value,

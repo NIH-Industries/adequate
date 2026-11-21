@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Adequate Dev, beside Adequate
+Building from source now makes Adequate Dev rather than Adequate: its own
+app in /Applications with an orange DEV ribbon on its icon, and its own
+Spaces, logins and settings. So the released Adequate from the Homebrew tap
+can be your everyday browser while you try changes in Adequate Dev, without
+one overwriting the other. Adequate Dev has no passkeys.
+
 ### One Touch ID for a 1Password fill
 ⌘⇧P could ask for Touch ID two or three times in a row for the same
 1Password account: once 1Password's session had lapsed, every request made

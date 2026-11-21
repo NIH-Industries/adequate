@@ -480,8 +480,8 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     /// first, once per site and app per Space, as Safari does: otherwise any
     /// page could launch any app with a URL handler, unprompted.
     private func openInOtherApp(_ url: URL, scheme: String) {
-        // adequate:// is for the CLI, never pages.
-        guard scheme.lowercased() != "adequate",
+        // adequate:// (and Adequate Dev's adequate-dev://) is for the CLI, never pages.
+        guard !["adequate", "adequate-dev"].contains(scheme.lowercased()),
               let app = NSWorkspace.shared.urlForApplication(toOpen: url) else { return }
         let site = self.site ?? "This page"
         let name = FileManager.default.displayName(atPath: app.path)

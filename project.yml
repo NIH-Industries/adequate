@@ -21,6 +21,8 @@ settings:
     # program running as you attach a debugger.
     ENABLE_DEBUG_DYLIB: NO
     CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+    # The Swift module stays Adequate whatever the app is called.
+    PRODUCT_MODULE_NAME: Adequate
 targets:
   Adequate:
     type: application
@@ -36,7 +38,9 @@ targets:
     info:
       path: Adequate/Info.plist
       properties:
-        CFBundleDisplayName: Adequate
+        CFBundleDisplayName: $(PRODUCT_NAME)
+        # The scheme the adequate CLI talks to the app with.
+        AdequateURLScheme: $(ADEQUATE_URL_SCHEME)
         LSApplicationCategoryType: public.app-category.productivity
         NSHumanReadableCopyright: "NIH Industries"
         NSCameraUsageDescription: "Web pages you allow, like video calls, can use your camera."
@@ -44,8 +48,8 @@ targets:
         NSLocationUsageDescription: "Web pages you allow, like maps, can use your location."
         NSLocationWhenInUseUsageDescription: "Web pages you allow, like maps, can use your location."
         CFBundleURLTypes:
-          - CFBundleURLName: com.nih-industries.adequate
-            CFBundleURLSchemes: [adequate]
+          - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
+            CFBundleURLSchemes: [$(ADEQUATE_URL_SCHEME)]
           - CFBundleURLName: Web site URL
             CFBundleTypeRole: Viewer
             CFBundleURLSchemes: [http, https]
@@ -59,3 +63,14 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.nih-industries.adequate
         GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ADEQUATE_URL_SCHEME: adequate
+      # Everyday builds (make build/run) are a separate app, Adequate Dev, so
+      # one can sit beside the released Adequate: its own bundle id, icon,
+      # Spaces, logins and settings. It has no passkeys: Apple's entitlement
+      # belongs to the released app's id.
+      configs:
+        Debug:
+          PRODUCT_NAME: Adequate Dev
+          PRODUCT_BUNDLE_IDENTIFIER: com.nih-industries.adequate.dev
+          ASSETCATALOG_COMPILER_APPICON_NAME: AppIconDev
+          ADEQUATE_URL_SCHEME: adequate-dev

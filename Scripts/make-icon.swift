@@ -1,9 +1,12 @@
 // Draws Adequate's app icon (one sensible checkmark on a plain grey tile) and writes every
-// size macOS needs into the AppIcon asset catalog.
+// size macOS needs into the AppIcon asset catalog. With --dev, adds an orange DEV ribbon
+// across the corner, for development builds (Adequate Dev).
 // Usage: swift Scripts/make-icon.swift Adequate/Assets.xcassets/AppIcon.appiconset
+//        swift Scripts/make-icon.swift --dev Adequate/Assets.xcassets/AppIconDev.appiconset
 import AppKit
 
-let outDir = URL(fileURLWithPath: CommandLine.arguments[1])
+let dev = CommandLine.arguments.contains("--dev")
+let outDir = URL(fileURLWithPath: CommandLine.arguments.dropFirst().last { $0 != "--dev" }!)
 try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
 
 func color(_ hex: UInt32, _ alpha: CGFloat = 1) -> CGColor {
@@ -46,6 +49,28 @@ func draw(size: Int) -> Data {
     ctx.setLineWidth(84); ctx.setLineCap(.round); ctx.setLineJoin(.round)
     ctx.strokePath()
     ctx.restoreGState()
+
+    if dev {
+        // A ribbon across the bottom-right corner, clipped to the tile: at 16px
+        // it's an orange corner, from 128px up it reads DEV.
+        ctx.saveGState()
+        ctx.addPath(bgPath); ctx.clip()
+        ctx.translateBy(x: 760, y: 264)
+        ctx.rotate(by: .pi / 4)
+        ctx.setShadow(offset: CGSize(width: 0, height: -6), blur: 12, color: color(0x000000, 0.35))
+        ctx.setFillColor(color(0xF97316))
+        ctx.fill(CGRect(x: -600, y: -85, width: 1200, height: 170))
+        ctx.setShadow(offset: .zero, blur: 0, color: nil)
+        let font = CTFontCreateWithName("Helvetica-Bold" as CFString, 120, nil)
+        let label = NSAttributedString(string: "DEV", attributes: [
+            .font: font, .foregroundColor: NSColor.white, .kern: 12,
+        ])
+        let line = CTLineCreateWithAttributedString(label)
+        let bounds = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
+        ctx.textPosition = CGPoint(x: -bounds.midX, y: -bounds.midY)
+        CTLineDraw(line, ctx)
+        ctx.restoreGState()
+    }
 
     let rep = NSBitmapImageRep(cgImage: ctx.makeImage()!)
     return rep.representation(using: .png, properties: [:])!
