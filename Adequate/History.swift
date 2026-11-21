@@ -117,6 +117,12 @@ final class History {
         return text
     }
 
+    /// Whether any page on this host (www. or not) has been visited here.
+    func hasVisited(host: String) -> Bool {
+        let wanted = Self.bare(host.lowercased())
+        return entries.keys.contains { URL(string: $0)?.host().map { Self.bare($0) } == wanted }
+    }
+
     /// The site: protocol, domain and any port, e.g. https://mail.google.com.
     private static func key(_ url: URL) -> String? {
         guard let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),

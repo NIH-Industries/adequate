@@ -823,11 +823,27 @@ final class SpaceStore: ObservableObject {
     }
 
     /// A link from another app (Adequate as default browser), or an html file:
-    /// a new tab in the Space you're in.
+    /// a new tab in the Space it belongs in (see `route`), else the one you're in.
     func openExternal(_ url: URL) {
+        if let state = route(url) {
+            current.cancelCycle()
+            selected = state.space.id
+            show(toast: "Opened in \(state.space.symbol) \(state.space.name)", lasting: .seconds(3))
+        }
         current.newTab().load(url: url)
         showWindow?()
         NSApp.activate()
+    }
+
+    /// Where a link from another app goes, learned from history: the one kept
+    /// Space that has visited its site, if that isn't where you are. A site
+    /// visited in several Spaces (Gmail) stays put, as does any link while ⌥
+    /// is held.
+    private func route(_ url: URL) -> SpaceState? {
+        guard !NSEvent.modifierFlags.contains(.option), let host = url.host(), !host.isEmpty,
+              !current.history.hasVisited(host: host) else { return nil }
+        let visited = states.filter { !$0.space.isThrowaway && $0.history.hasVisited(host: host) }
+        return visited.count == 1 ? visited.first : nil
     }
 
     /// ⌘⇧C: the current page's address onto the clipboard.

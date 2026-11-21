@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Links from other apps find their Space
+A link from Slack, Mail or the terminal opens in the Space that uses its site,
+if only one does: a GitHub link goes to the Space you use GitHub in, and a
+toast says "Opened in …". Sites used in several Spaces (Gmail) open where you
+are, as does anything when you hold ⌥ while clicking.
+
 ### Print and save as PDF
 ⌘P (Tab › Print…) prints the page, and the print panel's PDF menu saves it
 as a PDF. Pages' own Print buttons (window.print()) work too.

@@ -18,8 +18,10 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
 - **`adequate` CLI**: `adequate open <space> <url>...` opens tabs in a Space,
   creating it if needed; `adequate spaces` lists them. Requests carry a
   per-user token, so web pages can't forge them.
-- **Default browser**: links from other apps open as a tab in the current Space.
-  Use Adequate › Make Adequate the Default Browser.
+- **Default browser**: links from other apps open as a tab in the Space whose
+  history has their site, when exactly one kept Space does (a toast says
+  which); otherwise, or with ⌥ held as you click, in the current Space. Use
+  Adequate › Make Adequate the Default Browser.
 - **No extensions**: WKWebView apps can't load them. Logins come from
   1Password through its CLI instead: ⌘⇧P lists the logins saved for the site
   you're on, in every 1Password account (that site and its subdomains only, so a lookalike gets nothing,

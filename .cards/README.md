@@ -2,16 +2,17 @@
 
 # Adequate
 
-## Todo (1)
+## Todo (0)
 
-- [Route links from other apps to the right Space](route-links-from-other-apps-to-the-right-space.toml) — priority: low · tags: `idea`, `links`
+_none_
 
 ## In Progress (0)
 
 _none_
 
-## Done (7)
+## Done (8)
 
+- [Route links from other apps to the right Space](route-links-from-other-apps-to-the-right-space.toml) — priority: low · tags: `idea`, `links`
 - [Upload files from pages](upload-files-from-pages.toml) — priority: high · tags: `idea`, `pages`, `basics`
 - [Download files](download-files.toml) — priority: high · tags: `idea`, `pages`, `basics`
 - [Sign in to sites that use HTTP authentication](sign-in-to-sites-that-use-http-authentication.toml) — priority: medium · tags: `idea`, `pages`, `auth`
