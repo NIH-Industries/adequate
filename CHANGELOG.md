@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.2 - 2026-11-21
+
 ### The right version number
 Finder's Get Info and Adequate › About Adequate said 1.0 for every release.
 They now show the real version, starting with 0.2.2.
