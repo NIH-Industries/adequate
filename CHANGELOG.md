@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### The right version number
+Finder's Get Info and Adequate › About Adequate said 1.0 for every release.
+They now show the real version, starting with 0.2.2.
+
 ### Links from other apps find their Space
 A link from Slack, Mail or the terminal opens in the Space that uses its site,
 if only one does: a GitHub link goes to the Space you use GitHub in, and a

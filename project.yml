@@ -39,6 +39,8 @@ targets:
       path: Adequate/Info.plist
       properties:
         CFBundleDisplayName: $(PRODUCT_NAME)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         # The scheme the adequate CLI talks to the app with.
         AdequateURLScheme: $(ADEQUATE_URL_SCHEME)
         LSApplicationCategoryType: public.app-category.productivity
