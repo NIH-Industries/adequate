@@ -2,10 +2,9 @@
 
 # Adequate
 
-## Todo (6)
+## Todo (5)
 
 - [Route links from other apps to the right Space](route-links-from-other-apps-to-the-right-space.toml) — priority: low · tags: `idea`, `links`
-- [Sign in to sites that use HTTP authentication](sign-in-to-sites-that-use-http-authentication.toml) — priority: medium · tags: `idea`, `pages`, `auth`
 - [Recover tabs whose page crashed](recover-tabs-whose-page-crashed.toml) — priority: medium · tags: `idea`, `pages`, `basics`
 - [Reopen closed tabs](reopen-closed-tabs.toml) — priority: medium · tags: `idea`, `tabs`
 - [Print pages and save them as PDF](print-pages-and-save-them-as-pdf.toml) — priority: low · tags: `idea`, `pages`
@@ -15,10 +14,11 @@
 
 _none_
 
-## Done (2)
+## Done (3)
 
 - [Upload files from pages](upload-files-from-pages.toml) — priority: high · tags: `idea`, `pages`, `basics`
 - [Download files](download-files.toml) — priority: high · tags: `idea`, `pages`, `basics`
+- [Sign in to sites that use HTTP authentication](sign-in-to-sites-that-use-http-authentication.toml) — priority: medium · tags: `idea`, `pages`, `auth`
 
 ## Blocked (1)
 

@@ -81,6 +81,9 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
   or script in one still gets Gatekeeper's checks. A throwaway Space's
   downloads are kept (you asked for them) but their quarantine record leaves
   out where they came from. The list is only for this run.
+- **HTTP sign-in**: sites behind basic or digest authentication ask for a
+  user name and password in a sheet naming the site. They're kept only until
+  Adequate quits, never saved.
 - **Split view**: two tabs side by side (⌘\\, or drag one tab onto the middle of another,
   or right-click › Open in Split View). Click a pane to use it: it gets the
   Space's colour, and shortcuts, ⌘W and the site name act on it. Clicking

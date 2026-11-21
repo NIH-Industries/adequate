@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Sign in to password-protected sites
+Sites behind HTTP basic or digest authentication (staging sites, routers,
+some internal tools) used to just fail. Now Adequate asks for a user name and
+password in a sheet naming the site, says so if the last try was wrong or the
+password would go unencrypted, and keeps them only until it quits.
+
 ### Adequate Dev, beside Adequate
 Building from source now makes Adequate Dev rather than Adequate: its own
 app in /Applications with an orange DEV ribbon on its icon, and its own

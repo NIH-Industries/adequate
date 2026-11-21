@@ -454,13 +454,13 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     /// `defaultButton` is the one Return presses: the safe answer, so a page
     /// can't ask just as you're typing and have Return say yes.
     private func ask(_ message: String, detail: String? = nil, buttons: [String], defaultButton: Int = 0,
-                     accessory: NSView? = nil, then: @escaping (Int) -> Void) {
+                     accessory: NSView? = nil, focus: NSView? = nil, then: @escaping (Int) -> Void) {
         let alert = NSAlert()
         alert.messageText = message
         if let detail { alert.informativeText = detail }
         if let accessory {
             alert.accessoryView = accessory
-            alert.window.initialFirstResponder = accessory
+            alert.window.initialFirstResponder = focus ?? accessory
         }
         buttons.forEach { alert.addButton(withTitle: $0) }
         for (index, button) in alert.buttons.enumerated() {
@@ -551,6 +551,46 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
             panel.beginSheetModal(for: window, completionHandler: finish)
         } else {
             finish(panel.runModal())
+        }
+    }
+
+    /// A site behind HTTP basic or digest auth (staging sites, routers):
+    /// ask for a user name and password, kept only until Adequate quits.
+    /// Anything else (server trust, client certificates) is WebKit's call.
+    func webView(_ webView: WKWebView, didReceive challenge: URLAuthenticationChallenge,
+                 completionHandler: @escaping @MainActor (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        let space = challenge.protectionSpace
+        guard [NSURLAuthenticationMethodHTTPBasic, NSURLAuthenticationMethodHTTPDigest]
+            .contains(space.authenticationMethod) else {
+            return completionHandler(.performDefaultHandling, nil)
+        }
+        let host = [0, 80, 443].contains(space.port) ? space.host : "\(space.host):\(space.port)"
+        let user = NSTextField(string: challenge.proposedCredential?.user ?? "")
+        user.placeholderString = "User name"
+        let password = NSSecureTextField(string: "")
+        password.placeholderString = "Password"
+        user.nextKeyView = password
+        password.nextKeyView = user
+        let fields = NSStackView(views: [user, password])
+        fields.orientation = .vertical
+        fields.spacing = 8
+        fields.frame = NSRect(x: 0, y: 0, width: 260, height: 56)
+        for field in [user, password] {
+            field.widthAnchor.constraint(equalToConstant: 260).isActive = true
+        }
+        var detail: [String] = []
+        if challenge.previousFailureCount > 0 { detail.append("That user name and password didn't work.") }
+        if let realm = space.realm, !realm.isEmpty { detail.append("It says: “\(realm)”") }
+        if !space.receivesCredentialSecurely { detail.append("Your password will be sent unencrypted.") }
+        ask("Sign in to \(host)", detail: detail.isEmpty ? nil : detail.joined(separator: "\n"),
+            buttons: ["Sign In", "Cancel"], accessory: fields,
+            focus: user.stringValue.isEmpty ? user : password) { choice in
+            if choice == 0 {
+                completionHandler(.useCredential, URLCredential(user: user.stringValue, password: password.stringValue,
+                                                                persistence: .forSession))
+            } else {
+                completionHandler(.cancelAuthenticationChallenge, nil)
+            }
         }
     }
 
