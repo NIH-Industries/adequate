@@ -1,5 +1,5 @@
 name = "Download files"
-status = "todo"
+status = "done"
 description = """
 Links and responses that should save a file (PDFs served as attachments, CSV exports, zips) do nothing. No WKDownload handling at all.
 
@@ -14,7 +14,7 @@ Links and responses that should save a file (PDFs served as attachments, CSV exp
 - Downloads in a throwaway Space still land in ~/Downloads (they're files you asked for), but say so in the README.
 - Local files: a downloaded html in Downloads can only read itself (already handled)."""
 created_at = "2026-11-18T02:21:29.609436Z"
-updated_at = "2026-11-18T02:21:29.609436Z"
+updated_at = "2026-11-21T01:37:57.477529Z"
 tags = [
     "idea",
     "pages",
