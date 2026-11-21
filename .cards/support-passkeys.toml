@@ -4,7 +4,7 @@ description = """
 Passkeys (WebAuthn) don't work in Adequate: WKWebView only runs navigator.credentials for any site when the app has Apple's permission, and the ad-hoc signed build has none. For now, sign in with credentials copied from 1Password or Authy.
 
 ## Blocked on
-- Apple approving the managed entitlement com.apple.developer.web-browser.public-key-credential, requested 2026-11-19. Apple emails the account's address when it decides; until then, developer.apple.com › Certificates, Identifiers & Profiles › Identifiers › com.nih-industries.adequate › Additional Capabilities shows it once granted. No set turnaround.
+- Apple approving the managed entitlement com.apple.developer.web-browser.public-key-credential, requested 2026-11-19. Apple emails the account's address when it decides; until then, the App ID's page (https://developer.apple.com/account/resources/identifiers/bundleId/edit/BL9WHL2DM5, or Certificates, Identifiers & Profiles › Identifiers › com.nih-industries.adequate) › Capability Requests shows "Web Browser Public Key Credential Requests" with its status (Submitted as of 2026-11-21). No set turnaround.
 
 ## What it takes
 1. Once granted: tick the capability on the App ID, then make a Developer ID provisioning profile for com.nih-industries.adequate that includes it.
@@ -22,7 +22,7 @@ Passkeys (WebAuthn) don't work in Adequate: WKWebView only runs navigator.creden
 - Untested: not yet checked against a real signed build.
 - Without the entitlement, WebAuthn works only for domains claimed through webcredentials associated domains, which means our own sites only."""
 created_at = "2026-11-16T20:59:33.599731Z"
-updated_at = "2026-11-20T03:07:56.953067Z"
+updated_at = "2026-11-21T00:55:10.744082Z"
 tags = [
     "idea",
     "auth",
