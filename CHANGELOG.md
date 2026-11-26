@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.3 - 2026-11-27
+
 ### Open Tab in New Window works
 Popping a tab out (Tab › Open Tab in New Window, or right-click a tab) gave a
 small blank window. The new window is now full size with the page in it.
