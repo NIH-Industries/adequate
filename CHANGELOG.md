@@ -6,6 +6,11 @@
 Popping a tab out (Tab › Open Tab in New Window, or right-click a tab) gave a
 small blank window. The new window is now full size with the page in it.
 
+### Put a popped-out tab back
+Tab › Move Tab Back to Main Window puts a popped-out tab back in the sidebar
+of the Space it came from, still loaded. ⌥⌘N pops the tab you're on out, and
+in a popped-out window it sends it back.
+
 ## 0.2.2 - 2026-11-21
 
 ### The right version number

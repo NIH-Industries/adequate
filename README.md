@@ -36,7 +36,8 @@ A small macOS browser from NIH Industries, built on WebKit (WKWebView).
   them (asked once per site per Space, until Adequate quits), and share a
   window or the whole screen. A site you've allowed may play sound without
   a click, so a call you join isn't silent. To share one tab, right-click it and choose
-  Open in New Window, then pick that window.
+  Open in New Window (or press ⌥⌘N), then pick that window. ⌥⌘N in that
+  window (Tab › Move Tab Back to Main Window) puts it back in the sidebar.
 - **Location**: pages like maps can ask where you are, asked the same way
   as the camera (once per site per Space, until Adequate quits). macOS asks
   once too, whether Adequate may use Location Services.

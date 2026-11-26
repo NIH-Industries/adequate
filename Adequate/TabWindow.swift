@@ -4,16 +4,21 @@ import SwiftUI
 
 /// A tab popped out into a window of its own: just the page, with the same
 /// ⌘L address bar. Pick it in a meeting's screen-share picker to share one
-/// tab without the sidebar. Closing the window closes the tab.
+/// tab without the sidebar. Closing the window closes the tab;
+/// Tab › Move Tab Back to Main Window puts it back in the sidebar.
 @MainActor
 final class TabWindow: NSObject, NSWindowDelegate {
     let tab: Tab
     let window: NSWindow
+    /// The Space the tab came from, which it goes back to.
+    let origin: Space.ID
+    private var released = false
     var onClose: (() -> Void)?
     private var titleWatch: AnyCancellable?
 
-    init(tab: Tab, near parent: NSWindow?) {
+    init(tab: Tab, from origin: Space.ID, near parent: NSWindow?) {
         self.tab = tab
+        self.origin = origin
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1100, height: 760),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -40,8 +45,15 @@ final class TabWindow: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
     }
 
+    /// Closes the window but leaves the tab running, to go back in the sidebar.
+    func release() {
+        released = true
+        tab.onClose = nil
+        window.close()
+    }
+
     func windowWillClose(_ notification: Notification) {
-        tab.shutDown()
+        if !released { tab.shutDown() }
         onClose?()
     }
 }

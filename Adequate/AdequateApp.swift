@@ -67,6 +67,8 @@ struct AdequateCommands: Commands {
             Button("Open Tab in New Window") {
                 if let id = spaces.current.activeTab?.id { spaces.openInNewWindow(id, from: spaces.current) }
             }
+            Button("Move Tab Back to Main Window") { spaces.moveBackToMainWindow() }
+            Text("Pop Out / Back: ⌥⌘N")
             Divider()
             Button("Split View: Open / Close") { spaces.current.toggleSplit() }.keyboardShortcut("\\")
             Text("Click a pane to use it. Right-click a tab: Open in Split View")

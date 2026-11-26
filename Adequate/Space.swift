@@ -360,16 +360,21 @@ final class SpaceState: ObservableObject {
         tab.onOpenTab = { [weak self] configuration in
             self?.newTab(configuration: configuration).webView
         }
+        tab.onOpenInBackground = { [weak self] url in
+            self?.newTab(background: true).load(url: url)
+        }
+        watch(tab)
+        return tab
+    }
+
+    /// What a tab in the sidebar answers to: closing itself, and making sound.
+    private func watch(_ tab: Tab) {
         tab.onClose = { [weak self, weak tab] in
             // A page closing itself (an OAuth pop-up) isn't one to reopen.
             if let tab { self?.close(tab.id, remember: tab.closeRequested) }
         }
-        tab.onOpenInBackground = { [weak self] url in
-            self?.newTab(background: true).load(url: url)
-        }
         soundWatches[tab.id] = tab.$isPlayingAudio.removeDuplicates().dropFirst()
             .sink { [weak self] _ in self?.objectWillChange.send() }
-        return tab
     }
 
     var pinnedTabs: [Tab] { tabs.filter(\.isPinned) }
@@ -637,6 +642,17 @@ final class SpaceState: ObservableObject {
         soundWatches[id] = nil
         left(id)
         return tab
+    }
+
+    /// A tab coming back from a window of its own, still loaded: it goes at
+    /// the end of the sidebar and is selected. A pin it left comes back as a
+    /// plain tab; its sleeping copy is still in the sidebar.
+    func attach(_ tab: Tab) {
+        watch(tab)
+        tabs.append(tab)
+        selectedTabID = tab.id
+        splitActive = false
+        tab.focusPage()
     }
 
     /// Closes the tab you're using: the active pane's, once its page agrees.
@@ -911,9 +927,23 @@ final class SpaceStore: ObservableObject {
     /// Pops a tab out into its own window, e.g. to share just it in a call.
     func openInNewWindow(_ id: Tab.ID, from state: SpaceState) {
         guard let tab = state.detach(id) else { return }
-        let window = TabWindow(tab: tab, near: mainWindow)
+        let window = TabWindow(tab: tab, from: state.space.id, near: mainWindow)
         window.onClose = { [weak self, weak window] in self?.tabWindows.removeAll { $0 === window } }
         tabWindows.append(window)
+    }
+
+    /// Puts the tab in the front popped-out window back in the sidebar of the
+    /// Space it came from (or this one, if that Space has gone), still loaded.
+    func moveBackToMainWindow() {
+        guard let popped = tabWindows.first(where: { $0.window.isKeyWindow }) else {
+            return show(toast: "Pick a popped-out tab's window first")
+        }
+        let state = state(popped.origin) ?? current
+        popped.release()
+        state.attach(popped.tab)
+        select(state.space.id)
+        showWindow?()
+        NSApp.activate()
     }
 
     /// Starts a throwaway Space over, logged out of everything.
@@ -1081,6 +1111,7 @@ final class SpaceStore: ObservableObject {
             case ([.command, .option], "i"): popped.showDeveloperTools()
             case ([.command, .shift], "p"): fillFromOnePassword(in: popped)
             case ([.command], "p"): popped.printPage()
+            case ([.command, .option], "n"): moveBackToMainWindow()
             default: return event
             }
             return nil
@@ -1096,6 +1127,8 @@ final class SpaceStore: ObservableObject {
         switch (flags, key) {
         case ([.command], "t"): current.newTab()
         case ([.command, .shift], "t"): current.reopenClosedTab()
+        case ([.command, .option], "n"):
+            if let id = tab?.id { openInNewWindow(id, from: current) }
         case ([.command], "w"): return current.closeSelected() ? nil : event
         case ([.command], "p"): tab?.printPage()
         case ([.command], "l"): tab?.focusRequest += 1
