@@ -21,8 +21,12 @@ final class TabWindow: NSObject, NSWindowDelegate {
         super.init()
         window.isReleasedWhenClosed = false
         window.delegate = self
-        window.contentViewController = NSHostingController(
-            rootView: TabPage(tab: tab).frame(minWidth: 400, minHeight: 300))
+        let host = NSHostingController(rootView: TabPage(tab: tab).frame(minWidth: 400, minHeight: 300))
+        // Only the minimum: left to its defaults, the controller shrinks the
+        // window to the page's ideal size, which is that minimum.
+        host.sizingOptions = [.minSize]
+        window.contentViewController = host
+        window.setContentSize(NSSize(width: 1100, height: 760))
         if let parent {
             window.setFrameTopLeftPoint(NSPoint(x: parent.frame.minX + 40, y: parent.frame.maxY - 40))
         } else {

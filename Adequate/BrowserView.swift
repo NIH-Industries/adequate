@@ -1412,7 +1412,13 @@ struct WebViewHost: NSViewRepresentable {
         return container
     }
 
-    func updateNSView(_ container: NSView, context: Context) { adopt(into: container) }
+    /// Only takes back a page that's been left out of every window. A tab
+    /// popped out into its own window is still drawn once more by the main
+    /// window on its way out, and taking it back then leaves the new window
+    /// blank once the main window's holder goes.
+    func updateNSView(_ container: NSView, context: Context) {
+        if webView.window == nil { adopt(into: container) }
+    }
 
     static func dismantleNSView(_ container: NSView, coordinator: ()) {
         container.subviews.forEach { $0.removeFromSuperview() }
