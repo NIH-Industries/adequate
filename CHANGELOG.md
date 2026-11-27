@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.4 - 2026-11-27
+
 ### Downloads from Gmail and Google Drive
 Downloading an attachment from Gmail or a file from Google Drive did nothing
 for PDFs, images and documents (zips worked). They now save to ~/Downloads
