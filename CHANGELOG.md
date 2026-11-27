@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Downloads from Gmail and Google Drive
+Downloading an attachment from Gmail or a file from Google Drive did nothing
+for PDFs, images and documents (zips worked). They now save to ~/Downloads
+like any other download.
+
 ## 0.2.3 - 2026-11-27
 
 ### Open Tab in New Window works

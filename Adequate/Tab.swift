@@ -756,13 +756,15 @@ final class Tab: NSObject, ObservableObject, Identifiable, WKUIDelegate, WKNavig
     }
 
     /// What WebKit can't show (a zip, a dmg), or what the server says to
-    /// save (Content-Disposition: attachment), is downloaded instead.
+    /// save (Content-Disposition: attachment), is downloaded instead. In a
+    /// frame too, as Safari does: Gmail and Google Drive download through a
+    /// hidden iframe, so a PDF or image would otherwise load out of sight.
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
                  decisionHandler: @escaping @MainActor (WKNavigationResponsePolicy) -> Void) {
         let disposition = (navigationResponse.response as? HTTPURLResponse)?
             .value(forHTTPHeaderField: "Content-Disposition")?.lowercased() ?? ""
         let attachment = disposition.trimmingCharacters(in: .whitespaces).hasPrefix("attachment")
-        if !navigationResponse.canShowMIMEType || (navigationResponse.isForMainFrame && attachment) {
+        if !navigationResponse.canShowMIMEType || attachment {
             return decisionHandler(.download)
         }
         decisionHandler(.allow)
